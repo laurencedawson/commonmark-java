@@ -250,4 +250,62 @@ public class ParserTest {
         }
         return depth;
     }
+
+    @Test
+    public void parseInlineProducesSameOutputAsParseForSingleParagraphs() {
+        Parser parser = Parser.builder().build();
+        HtmlRenderer renderer = HtmlRenderer.builder().build();
+
+        String[] inputs = {
+                "**bold** and *italic* and `code`",
+                "just plain text",
+                "[a link](https://example.com)",
+                "text with ~~strikethrough~~ maybe",
+                "a **nested *emphasis* test**",
+        };
+
+        for (String input : inputs) {
+            String fromParse = renderer.render(parser.parse(input));
+            String fromParseInline = renderer.render(parser.parseInline(input));
+            assertThat(fromParseInline)
+                    .as("parseInline should match parse for: " + input)
+                    .isEqualTo(fromParse);
+        }
+    }
+
+    @Test
+    public void parseInlineIntoAndPostProcessOnly() {
+        Parser parser = Parser.builder().build();
+        HtmlRenderer renderer = HtmlRenderer.builder().build();
+
+        // Manually build a document with two paragraphs using parseInlineInto
+        var doc = new Document();
+        var para1 = new Paragraph();
+        doc.appendChild(para1);
+        parser.parseInlineInto("**bold** text", para1);
+
+        var para2 = new Paragraph();
+        doc.appendChild(para2);
+        parser.parseInlineInto("*italic* text", para2);
+
+        Node result = parser.postProcessOnly(doc);
+
+        String html = renderer.render(result);
+        assertThat(html).isEqualTo("<p><strong>bold</strong> text</p>\n<p><em>italic</em> text</p>\n");
+    }
+
+    @Test
+    public void parseInlineStructure() {
+        Parser parser = Parser.builder().build();
+
+        Node doc = parser.parseInline("hello **world**");
+
+        // Should be Document > Paragraph > [Text, StrongEmphasis > Text]
+        assertThat(doc).isInstanceOf(Document.class);
+        assertThat(doc.getFirstChild()).isInstanceOf(Paragraph.class);
+        var para = doc.getFirstChild();
+        assertThat(para.getFirstChild()).isInstanceOf(Text.class);
+        assertThat(((Text) para.getFirstChild()).getLiteral()).isEqualTo("hello ");
+        assertThat(para.getFirstChild().getNext()).isInstanceOf(StrongEmphasis.class);
+    }
 }

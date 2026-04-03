@@ -240,4 +240,50 @@ public class BlobBenchmarkTest {
         }
         System.out.println("=========================");
     }
+
+    /**
+     * Benchmark parseInline() fast path for single-paragraph inputs.
+     */
+    @Test
+    public void benchInline() {
+        Parser parser = createParser();
+
+        String[][] inputs = {
+                {"plain", PLAIN},
+                {"simple", SIMPLE},
+                {"heavy-inline", HEAVY_INLINE},
+        };
+
+        // Warmup
+        for (String[] entry : inputs) {
+            for (int i = 0; i < WARMUP; i++) {
+                parser.parseInline(entry[1]);
+            }
+        }
+
+        System.out.println("=== parseInline() Fast Path ===");
+        for (String[] entry : inputs) {
+            String name = entry[0];
+            String input = entry[1];
+
+            double[] times = new double[ROUNDS];
+            long[] allocs = new long[ROUNDS];
+            for (int r = 0; r < ROUNDS; r++) {
+                long allocBefore = getAllocatedBytes();
+                long start = System.nanoTime();
+                for (int i = 0; i < ITERATIONS; i++) {
+                    parser.parseInline(input);
+                }
+                long elapsed = System.nanoTime() - start;
+                long allocAfter = getAllocatedBytes();
+                times[r] = elapsed / 1000.0 / ITERATIONS;
+                allocs[r] = (allocAfter - allocBefore) / ITERATIONS;
+            }
+            Arrays.sort(times);
+            Arrays.sort(allocs);
+            System.out.printf("%s (%d chars): %.1f us, %d B/iter%n",
+                    name, input.length(), times[ROUNDS / 2], allocs[ROUNDS / 2]);
+        }
+        System.out.println("===============================");
+    }
 }

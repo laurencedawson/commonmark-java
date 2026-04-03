@@ -39,6 +39,9 @@ public class Parser {
     private final IncludeSourceSpans includeSourceSpans;
     private final int maxOpenBlockParsers;
 
+    // Cached inline parser for fast-path parsing (not thread-safe).
+    private final InlineParser cachedInlineParser;
+
     private Parser(Builder builder) {
         this.blockParserFactories = DocumentParser.calculateBlockParserFactories(builder.blockParserFactories, builder.enabledBlockTypes);
         this.inlineParserFactory = builder.getInlineParserFactory();
@@ -50,11 +53,9 @@ public class Parser {
         this.includeSourceSpans = builder.includeSourceSpans;
         this.maxOpenBlockParsers = builder.maxOpenBlockParsers;
 
-        // Try to construct an inline parser. Invalid configuration might result in an exception, which we want to
-        // detect as soon as possible.
         var context = new InlineParserContextImpl(
                 inlineContentParserFactories, delimiterProcessors, linkProcessors, linkMarkers, new Definitions());
-        this.inlineParserFactory.create(context);
+        this.cachedInlineParser = this.inlineParserFactory.create(context);
     }
 
     /**
@@ -103,6 +104,57 @@ public class Parser {
         Objects.requireNonNull(input, "input must not be null");
         DocumentParser documentParser = createDocumentParser();
         Node document = documentParser.parse(input);
+        return postProcess(document);
+    }
+
+    /**
+     * Fast path: parse a single line of inline content without the block parser, returning a Document with one
+     * Paragraph containing inline nodes. Post-processors are applied.
+     * <p>
+     * This is useful when the caller knows the input is a single paragraph with no block-level syntax (no headings,
+     * lists, blockquotes, code blocks, etc.). It bypasses the block parser entirely, which is significantly faster.
+     * <p>
+     * <b>Not thread-safe</b> — uses a cached inline parser. If thread safety is needed, use {@link #parse(String)}.
+     *
+     * @param input the inline text to parse - must not be null, must not contain newlines
+     * @return the root node (a Document containing one Paragraph)
+     */
+    public Node parseInline(String input) {
+        Objects.requireNonNull(input, "input must not be null");
+        var doc = new Document();
+        var para = new Paragraph();
+        doc.appendChild(para);
+        cachedInlineParser.parse(SourceLines.of(SourceLine.of(input)), para);
+        return postProcess(doc);
+    }
+
+    /**
+     * Parse inline content into an existing Paragraph node. No post-processing is applied.
+     * <p>
+     * This is the lowest-level fast path, useful when building a Document manually (e.g. splitting input into
+     * paragraphs and parsing each one). Call {@link #postProcessOnly(Node)} on the final Document when done.
+     * <p>
+     * <b>Not thread-safe</b> — uses a cached inline parser.
+     *
+     * @param input the inline text to parse - must not be null
+     * @param para the Paragraph node to append inline nodes to
+     */
+    public void parseInlineInto(String input, Paragraph para) {
+        Objects.requireNonNull(input, "input must not be null");
+        Objects.requireNonNull(para, "para must not be null");
+        cachedInlineParser.parse(SourceLines.of(SourceLine.of(input)), para);
+    }
+
+    /**
+     * Run only post-processors on an already-built document tree.
+     * <p>
+     * Use this after manually constructing a document with {@link #parseInlineInto(String, Paragraph)}.
+     *
+     * @param document the document to post-process
+     * @return the post-processed document (may be the same or a replacement node)
+     */
+    public Node postProcessOnly(Node document) {
+        Objects.requireNonNull(document, "document must not be null");
         return postProcess(document);
     }
 
