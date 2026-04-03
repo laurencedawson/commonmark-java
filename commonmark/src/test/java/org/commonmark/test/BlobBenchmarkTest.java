@@ -242,6 +242,67 @@ public class BlobBenchmarkTest {
     }
 
     /**
+     * Benchmark parseParagraphs() fast path for multi-paragraph inputs that have no block syntax.
+     */
+    @Test
+    public void benchParagraphs() {
+        Parser parser = createParser();
+
+        // These inputs contain only paragraphs — no headings, lists, blockquotes, code blocks
+        String paragraphsOnly = ""
+                + "First paragraph with **bold** and *italic* and `code`.\n\n"
+                + "Second paragraph with [a link](https://example.com) and more text.\n\n"
+                + "Third paragraph just plain text with no formatting at all.\n\n"
+                + "Fourth paragraph with **nested *emphasis* inside bold** text.\n\n"
+                + "Fifth paragraph ending the document.";
+
+        // Warmup
+        for (int i = 0; i < WARMUP; i++) {
+            parser.parseParagraphs(paragraphsOnly);
+        }
+
+        System.out.println("=== parseParagraphs() Fast Path ===");
+        double[] times = new double[ROUNDS];
+        long[] allocs = new long[ROUNDS];
+        for (int r = 0; r < ROUNDS; r++) {
+            long allocBefore = getAllocatedBytes();
+            long start = System.nanoTime();
+            for (int i = 0; i < ITERATIONS; i++) {
+                parser.parseParagraphs(paragraphsOnly);
+            }
+            long elapsed = System.nanoTime() - start;
+            long allocAfter = getAllocatedBytes();
+            times[r] = elapsed / 1000.0 / ITERATIONS;
+            allocs[r] = (allocAfter - allocBefore) / ITERATIONS;
+        }
+        Arrays.sort(times);
+        Arrays.sort(allocs);
+        System.out.printf("paragraphs-only (%d chars): %.1f us, %d B/iter%n",
+                paragraphsOnly.length(), times[ROUNDS / 2], allocs[ROUNDS / 2]);
+
+        // Compare with parse()
+        for (int i = 0; i < WARMUP; i++) {
+            parser.parse(paragraphsOnly);
+        }
+        for (int r = 0; r < ROUNDS; r++) {
+            long allocBefore = getAllocatedBytes();
+            long start = System.nanoTime();
+            for (int i = 0; i < ITERATIONS; i++) {
+                parser.parse(paragraphsOnly);
+            }
+            long elapsed = System.nanoTime() - start;
+            long allocAfter = getAllocatedBytes();
+            times[r] = elapsed / 1000.0 / ITERATIONS;
+            allocs[r] = (allocAfter - allocBefore) / ITERATIONS;
+        }
+        Arrays.sort(times);
+        Arrays.sort(allocs);
+        System.out.printf("paragraphs-only via parse() (%d chars): %.1f us, %d B/iter%n",
+                paragraphsOnly.length(), times[ROUNDS / 2], allocs[ROUNDS / 2]);
+        System.out.println("===================================");
+    }
+
+    /**
      * Benchmark parseInline() fast path for single-paragraph inputs.
      */
     @Test

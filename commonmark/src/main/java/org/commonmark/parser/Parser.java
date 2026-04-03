@@ -158,6 +158,47 @@ public class Parser {
         return postProcess(document);
     }
 
+    /**
+     * Fast path: parse input that contains only paragraphs (no block-level syntax). Splits on blank lines and
+     * parses each paragraph's inline content directly, bypassing the block parser.
+     * <p>
+     * This is useful when the caller has determined the input contains no headings, lists, blockquotes, code blocks,
+     * thematic breaks, or HTML blocks — just paragraphs separated by blank lines. Post-processors are applied.
+     * <p>
+     * <b>Not thread-safe</b> — uses a cached inline parser. If thread safety is needed, use {@link #parse(String)}.
+     *
+     * @param input the text to parse - must not be null, must contain only paragraph content
+     * @return the root node
+     */
+    public Node parseParagraphs(String input) {
+        Objects.requireNonNull(input, "input must not be null");
+        var doc = new Document();
+        int len = input.length();
+        int start = 0;
+        while (start < len) {
+            // Skip blank lines
+            while (start < len && input.charAt(start) == '\n') {
+                start++;
+            }
+            if (start >= len) {
+                break;
+            }
+            // Find end of paragraph (blank line or end of input)
+            int end = input.indexOf("\n\n", start);
+            if (end < 0) {
+                end = len;
+            }
+            String paraText = input.substring(start, end);
+            if (!paraText.isEmpty()) {
+                var para = new Paragraph();
+                doc.appendChild(para);
+                cachedInlineParser.parse(SourceLines.of(SourceLine.of(paraText)), para);
+            }
+            start = end;
+        }
+        return postProcess(doc);
+    }
+
     private DocumentParser createDocumentParser() {
         return new DocumentParser(blockParserFactories, inlineParserFactory, inlineContentParserFactories,
                 delimiterProcessors, linkProcessors, linkMarkers, includeSourceSpans, maxOpenBlockParsers);

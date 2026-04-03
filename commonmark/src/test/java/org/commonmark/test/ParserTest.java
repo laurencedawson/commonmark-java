@@ -295,6 +295,28 @@ public class ParserTest {
     }
 
     @Test
+    public void parseParagraphsProducesSameOutputAsParseForParagraphOnlyInputs() {
+        Parser parser = Parser.builder().build();
+        HtmlRenderer renderer = HtmlRenderer.builder().build();
+
+        String[] inputs = {
+                "just one paragraph",
+                "first paragraph\n\nsecond paragraph",
+                "**bold** and *italic*\n\nmore `code` here\n\nthird one",
+                "single line with [a link](https://example.com)",
+                "para one\n\n\n\npara two after blank lines",
+        };
+
+        for (String input : inputs) {
+            String fromParse = renderer.render(parser.parse(input));
+            String fromParseParagraphs = renderer.render(parser.parseParagraphs(input));
+            assertThat(fromParseParagraphs)
+                    .as("parseParagraphs should match parse for: " + input)
+                    .isEqualTo(fromParse);
+        }
+    }
+
+    @Test
     public void parseInlineStructure() {
         Parser parser = Parser.builder().build();
 
