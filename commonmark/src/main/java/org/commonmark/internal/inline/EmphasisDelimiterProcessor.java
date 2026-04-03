@@ -47,22 +47,30 @@ public abstract class EmphasisDelimiterProcessor implements DelimiterProcessor {
             emphasis = new Emphasis(String.valueOf(delimiterChar));
         }
 
-        SourceSpans sourceSpans = SourceSpans.empty();
-        sourceSpans.addAllFrom(openingRun.getOpeners(usedDelimiters));
-
         Text opener = openingRun.getOpener();
+        boolean trackSourceSpans = !opener.getSourceSpans().isEmpty();
+
+        SourceSpans sourceSpans = null;
+        if (trackSourceSpans) {
+            sourceSpans = SourceSpans.empty();
+            sourceSpans.addAllFrom(openingRun.getOpeners(usedDelimiters));
+        }
+
         Node closerNode = closingRun.getCloser();
         Node n = opener.getNext();
         while (n != null && n != closerNode) {
             Node next = n.getNext();
             emphasis.appendChild(n);
-            sourceSpans.addAll(n.getSourceSpans());
+            if (sourceSpans != null) {
+                sourceSpans.addAll(n.getSourceSpans());
+            }
             n = next;
         }
 
-        sourceSpans.addAllFrom(closingRun.getClosers(usedDelimiters));
-
-        emphasis.setSourceSpans(sourceSpans.getSourceSpans());
+        if (sourceSpans != null) {
+            sourceSpans.addAllFrom(closingRun.getClosers(usedDelimiters));
+            emphasis.setSourceSpans(sourceSpans.getSourceSpans());
+        }
         opener.insertAfter(emphasis);
 
         return usedDelimiters;
