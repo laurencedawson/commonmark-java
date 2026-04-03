@@ -46,6 +46,8 @@ public class AutolinkInlineParser implements InlineContentParser {
     }
 
     public static class Factory implements InlineContentParserFactory {
+        private static final AutolinkInlineParser INSTANCE = new AutolinkInlineParser();
+
         @Override
         public Set<Character> getTriggerCharacters() {
             return Set.of('<');
@@ -53,7 +55,7 @@ public class AutolinkInlineParser implements InlineContentParser {
 
         @Override
         public InlineContentParser create() {
-            return new AutolinkInlineParser();
+            return INSTANCE;
         }
     }
 }

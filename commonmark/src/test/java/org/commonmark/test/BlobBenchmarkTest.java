@@ -1,11 +1,15 @@
 package org.commonmark.test;
 
+import org.commonmark.node.Code;
+import org.commonmark.node.Node;
+import org.commonmark.node.Text;
 import org.commonmark.parser.Parser;
 import org.junit.jupiter.api.Test;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.util.Arrays;
+import java.util.Map;
 
 public class BlobBenchmarkTest {
 
@@ -217,6 +221,67 @@ public class BlobBenchmarkTest {
                     name, input.length(), inputBytes, medianBytes, ratio, estObjects);
         }
         System.out.println("=========================================");
+    }
+
+    /**
+     * Count AST nodes and their types after parsing, to understand what portion of
+     * allocations are inherent output vs overhead.
+     */
+    @Test
+    public void nodeCount() {
+        Parser parser = createParser();
+
+        String[][] inputs = {
+                {"simple", SIMPLE},
+                {"medium", MEDIUM},
+                {"heavy-inline", HEAVY_INLINE},
+                {"long-doc", LONG_DOC},
+        };
+
+        System.out.println("\n=== AST Node Count ===");
+        for (String[] entry : inputs) {
+            String name = entry[0];
+            String input = entry[1];
+            Node doc = parser.parse(input);
+
+            Map<String, Integer> counts = new java.util.TreeMap<>();
+            int totalNodes = 0;
+            int totalStringBytes = 0;
+            Node node = doc;
+            while (node != null) {
+                totalNodes++;
+                String type = node.getClass().getSimpleName();
+                counts.merge(type, 1, Integer::sum);
+                if (node instanceof Text) {
+                    totalStringBytes += ((Text) node).getLiteral().length() * 2;
+                } else if (node instanceof Code) {
+                    totalStringBytes += ((Code) node).getLiteral().length() * 2;
+                }
+
+                // Depth-first traversal
+                if (node.getFirstChild() != null) {
+                    node = node.getFirstChild();
+                } else if (node.getNext() != null) {
+                    node = node.getNext();
+                } else {
+                    // Walk up to find next sibling
+                    node = node.getParent();
+                    while (node != null && node.getNext() == null) {
+                        node = node.getParent();
+                    }
+                    if (node != null) {
+                        node = node.getNext();
+                    }
+                }
+            }
+
+            System.out.printf("%s (%d chars): %d nodes, %d B in strings%n", name, input.length(), totalNodes, totalStringBytes);
+            counts.entrySet().stream()
+                    .sorted((a, b) -> b.getValue() - a.getValue())
+                    .limit(8)
+                    .forEach(e -> System.out.printf("  %4d × %s%n", e.getValue(), e.getKey()));
+        }
+        System.out.println("======================");
     }
 
     @Test

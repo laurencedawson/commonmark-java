@@ -55,6 +55,7 @@ public class EntityInlineParser implements InlineContentParser {
     }
 
     public static class Factory implements InlineContentParserFactory {
+        private static final EntityInlineParser INSTANCE = new EntityInlineParser();
 
         @Override
         public Set<Character> getTriggerCharacters() {
@@ -63,7 +64,7 @@ public class EntityInlineParser implements InlineContentParser {
 
         @Override
         public InlineContentParser create() {
-            return new EntityInlineParser();
+            return INSTANCE;
         }
     }
 }

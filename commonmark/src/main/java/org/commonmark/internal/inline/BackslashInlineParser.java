@@ -35,6 +35,8 @@ public class BackslashInlineParser implements InlineContentParser {
     }
 
     public static class Factory implements InlineContentParserFactory {
+        private static final BackslashInlineParser INSTANCE = new BackslashInlineParser();
+
         @Override
         public Set<Character> getTriggerCharacters() {
             return Set.of('\\');
@@ -42,7 +44,7 @@ public class BackslashInlineParser implements InlineContentParser {
 
         @Override
         public InlineContentParser create() {
-            return new BackslashInlineParser();
+            return INSTANCE;
         }
     }
 }

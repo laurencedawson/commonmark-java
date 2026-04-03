@@ -28,6 +28,13 @@ public class SourceLines {
         return new SourceLines(new ArrayList<>(sourceLines));
     }
 
+    /**
+     * Wrap an existing list without copying. The caller must not modify the list after this call.
+     */
+    public static SourceLines wrap(List<SourceLine> sourceLines) {
+        return new SourceLines(sourceLines);
+    }
+
     private SourceLines(List<SourceLine> lines) {
         this.lines = lines;
     }

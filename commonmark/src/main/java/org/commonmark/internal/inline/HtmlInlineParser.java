@@ -203,6 +203,7 @@ public class HtmlInlineParser implements InlineContentParser {
     }
 
     public static class Factory implements InlineContentParserFactory {
+        private static final HtmlInlineParser INSTANCE = new HtmlInlineParser();
 
         @Override
         public Set<Character> getTriggerCharacters() {
@@ -211,7 +212,7 @@ public class HtmlInlineParser implements InlineContentParser {
 
         @Override
         public InlineContentParser create() {
-            return new HtmlInlineParser();
+            return INSTANCE;
         }
     }
 }
