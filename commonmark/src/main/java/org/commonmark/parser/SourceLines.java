@@ -43,6 +43,9 @@ public class SourceLines {
     }
 
     public String getContent() {
+        if (lines.size() == 1) {
+            return lines.get(0).getContent().toString();
+        }
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < lines.size(); i++) {
             if (i != 0) {
