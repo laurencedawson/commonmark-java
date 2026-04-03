@@ -158,12 +158,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         reset(lines);
 
         while (true) {
-            var nodes = parseInline();
-            if (nodes == null) {
+            if (!parseInline(block)) {
                 break;
-            }
-            for (Node node : nodes) {
-                block.appendChild(node);
             }
         }
 
@@ -190,36 +186,36 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
     /**
      * Parse the next inline element in subject, advancing our position.
-     * On success, return the new inline node.
-     * On failure, return null.
+     * Appends result directly to block. Returns false at end of input.
      */
-    private List<? extends Node> parseInline() {
+    private boolean parseInline(Node block) {
         char c = scanner.peek();
 
         switch (c) {
             case '[':
-                return List.of(parseOpenBracket());
+                block.appendChild(parseOpenBracket());
+                return true;
             case ']':
-                return List.of(parseCloseBracket());
+                block.appendChild(parseCloseBracket());
+                return true;
             case '\n':
-                return List.of(parseLineBreak());
+                block.appendChild(parseLineBreak());
+                return true;
             case Scanner.END:
-                return null;
+                return false;
         }
 
         if (linkMarkers.get(c)) {
             var markerPosition = scanner.position();
-            var nodes = parseLinkMarker();
-            if (nodes != null) {
-                return nodes;
+            if (parseLinkMarker(block)) {
+                return true;
             }
-            // Reset and try other things (e.g. inline parsers below)
             scanner.setPosition(markerPosition);
         }
 
-        // No inline parser, delimiter or other special handling.
         if (!specialCharacters.get(c)) {
-            return List.of(parseText());
+            block.appendChild(parseText());
+            return true;
         }
 
         List<InlineContentParser> inlineParsers = this.inlineParsers.get(c);
@@ -234,9 +230,9 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
                     if (includeSourceSpans && node.getSourceSpans().isEmpty()) {
                         node.setSourceSpans(scanner.getSource(position, scanner.position()).getSourceSpans());
                     }
-                    return List.of(node);
+                    block.appendChild(node);
+                    return true;
                 } else {
-                    // Reset position
                     scanner.setPosition(position);
                 }
             }
@@ -244,23 +240,19 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
         DelimiterProcessor delimiterProcessor = delimiterProcessors.get(c);
         if (delimiterProcessor != null) {
-            List<? extends Node> nodes = parseDelimiters(delimiterProcessor, c);
-            if (nodes != null) {
-                return nodes;
+            if (parseDelimiters(block, delimiterProcessor, c)) {
+                return true;
             }
         }
 
-        // If we get here, even for a special/delimiter character, we will just treat it as text.
-        return List.of(parseText());
+        block.appendChild(parseText());
+        return true;
     }
 
-    /**
-     * Attempt to parse delimiters like emphasis, strong emphasis or custom delimiters.
-     */
-    private List<? extends Node> parseDelimiters(DelimiterProcessor delimiterProcessor, char delimiterChar) {
+    private boolean parseDelimiters(Node block, DelimiterProcessor delimiterProcessor, char delimiterChar) {
         DelimiterData res = scanDelimiters(delimiterProcessor, delimiterChar);
         if (res == null) {
-            return null;
+            return false;
         }
 
         List<Text> characters = res.characters;
@@ -271,7 +263,10 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             lastDelimiter.previous.next = lastDelimiter;
         }
 
-        return characters;
+        for (Text text : characters) {
+            block.appendChild(text);
+        }
+        return true;
     }
 
     /**
@@ -290,11 +285,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         return node;
     }
 
-    /**
-     * If next character is {@code [}, add a bracket to the stack.
-     * Otherwise, return null.
-     */
-    private List<? extends Node> parseLinkMarker() {
+    private boolean parseLinkMarker(Node block) {
         var markerPosition = scanner.position();
         scanner.next();
         var bracketPosition = scanner.position();
@@ -303,11 +294,12 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             var bangNode = text(markerPosition, bracketPosition);
             var bracketNode = text(bracketPosition, contentPosition);
 
-            // Add entry to stack for this opener
             addBracket(Bracket.withMarker(bangNode, markerPosition, bracketNode, bracketPosition, contentPosition, lastBracket, lastDelimiter));
-            return List.of(bangNode, bracketNode);
+            block.appendChild(bangNode);
+            block.appendChild(bracketNode);
+            return true;
         } else {
-            return null;
+            return false;
         }
     }
 
