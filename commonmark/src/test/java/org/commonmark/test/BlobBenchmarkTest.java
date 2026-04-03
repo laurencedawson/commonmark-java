@@ -37,7 +37,9 @@ public class BlobBenchmarkTest {
         {
             StringBuilder sb = new StringBuilder();
             for (int i = 1; i <= 6; i++) {
-                for (int j = 0; j < i; j++) sb.append('#');
+                for (int j = 0; j < i; j++) {
+                    sb.append('#');
+                }
                 sb.append(" Heading ").append(i).append("\n\n");
             }
             for (int i = 0; i < 10; i++) {
@@ -73,7 +75,9 @@ public class BlobBenchmarkTest {
             StringBuilder sb = new StringBuilder();
             sb.append("> level 1\n");
             for (int i = 2; i <= 10; i++) {
-                for (int j = 0; j < i; j++) sb.append("> ");
+                for (int j = 0; j < i; j++) {
+                    sb.append("> ");
+                }
                 sb.append("level ").append(i).append("\n");
             }
             DEEP_NESTING = sb.toString();
@@ -128,7 +132,9 @@ public class BlobBenchmarkTest {
     }
 
     private static long getAllocatedBytes() {
-        if (GET_THREAD_ALLOC == null) return -1;
+        if (GET_THREAD_ALLOC == null) {
+            return -1;
+        }
         try {
             return (long) GET_THREAD_ALLOC.invoke(THREAD_MX_BEAN, Thread.currentThread().getId());
         } catch (Throwable e) {
@@ -184,7 +190,9 @@ public class BlobBenchmarkTest {
 
         // Warmup all
         for (String[] entry : inputs) {
-            for (int i = 0; i < 100; i++) parser.parse(entry[1]);
+            for (int i = 0; i < 100; i++) {
+                parser.parse(entry[1]);
+            }
         }
 
         System.out.println("\n=== Allocation Profile (single parse) ===");

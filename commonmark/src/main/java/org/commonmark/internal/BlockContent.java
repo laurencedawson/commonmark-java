@@ -26,8 +26,12 @@ class BlockContent {
     }
 
     public String getString() {
-        if (sb != null) return sb.toString();
-        if (first != null) return first;
+        if (sb != null) {
+            return sb.toString();
+        }
+        if (first != null) {
+            return first;
+        }
         return "";
     }
 

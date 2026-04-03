@@ -108,7 +108,11 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
     private static boolean[] calculateLinkMarkers(Set<Character> linkMarkers) {
         var arr = new boolean[128];
-        for (var c : linkMarkers) if (c < 128) arr[c] = true;
+        for (var c : linkMarkers) {
+            if (c < 128) {
+                arr[c] = true;
+            }
+        }
         arr['!'] = true;
         return arr;
     }
@@ -118,9 +122,17 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
                                                         List<InlineContentParserFactory> inlineContentParserFactories) {
         var arr = new boolean[128];
         System.arraycopy(linkMarkers, 0, arr, 0, 128);
-        for (Character c : delimiterCharacters) if (c < 128) arr[c] = true;
+        for (Character c : delimiterCharacters) {
+            if (c < 128) {
+                arr[c] = true;
+            }
+        }
         for (var factory : inlineContentParserFactories) {
-            for (var c : factory.getTriggerCharacters()) if (c < 128) arr[c] = true;
+            for (var c : factory.getTriggerCharacters()) {
+                if (c < 128) {
+                    arr[c] = true;
+                }
+            }
         }
         arr['['] = true;
         arr[']'] = true;

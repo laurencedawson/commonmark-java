@@ -18,7 +18,9 @@ public class BlockContinue {
     }
 
     public static BlockContinue atIndex(int newIndex) {
-        if (newIndex == 0) return AT_INDEX_0;
+        if (newIndex == 0) {
+            return AT_INDEX_0;
+        }
         return new BlockContinueImpl(newIndex, -1, false);
     }
 
