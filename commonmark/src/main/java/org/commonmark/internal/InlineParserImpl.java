@@ -688,9 +688,10 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         return new DelimiterData(delimiters, canOpen, canClose);
     }
 
-    private void processDelimiters(Delimiter stackBottom) {
+    private final Map<Character, Delimiter> openersBottom = new HashMap<>();
 
-        Map<Character, Delimiter> openersBottom = new HashMap<>();
+    private void processDelimiters(Delimiter stackBottom) {
+        openersBottom.clear();
 
         // find first closer above stackBottom:
         Delimiter closer = lastDelimiter;
