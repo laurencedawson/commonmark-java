@@ -7,6 +7,9 @@ import org.commonmark.internal.BlockContinueImpl;
  */
 public class BlockContinue {
 
+    private static final BlockContinueImpl FINISHED = new BlockContinueImpl(-1, -1, true);
+    private static final BlockContinueImpl AT_INDEX_0 = new BlockContinueImpl(0, -1, false);
+
     protected BlockContinue() {
     }
 
@@ -15,6 +18,7 @@ public class BlockContinue {
     }
 
     public static BlockContinue atIndex(int newIndex) {
+        if (newIndex == 0) return AT_INDEX_0;
         return new BlockContinueImpl(newIndex, -1, false);
     }
 
@@ -23,7 +27,7 @@ public class BlockContinue {
     }
 
     public static BlockContinue finished() {
-        return new BlockContinueImpl(-1, -1, true);
+        return FINISHED;
     }
 
 }

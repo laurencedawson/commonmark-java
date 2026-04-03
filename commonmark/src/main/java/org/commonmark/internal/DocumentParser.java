@@ -463,13 +463,15 @@ public class DocumentParser implements ParserState {
         }
     }
 
+    private final MatchedBlockParserImpl reusableMatchedBlockParser = new MatchedBlockParserImpl(null);
+
     private BlockStartImpl findBlockStart(BlockParser blockParser) {
         if (openBlockParsers.size() > maxOpenBlockParsers) {
             return null;
         }
-        MatchedBlockParser matchedBlockParser = new MatchedBlockParserImpl(blockParser);
+        reusableMatchedBlockParser.matchedBlockParser = blockParser;
         for (BlockParserFactory blockParserFactory : blockParserFactories) {
-            BlockStart result = blockParserFactory.tryStart(this, matchedBlockParser);
+            BlockStart result = blockParserFactory.tryStart(this, reusableMatchedBlockParser);
             if (result instanceof BlockStartImpl) {
                 return (BlockStartImpl) result;
             }
@@ -574,7 +576,7 @@ public class DocumentParser implements ParserState {
 
     private static class MatchedBlockParserImpl implements MatchedBlockParser {
 
-        private final BlockParser matchedBlockParser;
+        private BlockParser matchedBlockParser;
 
         public MatchedBlockParserImpl(BlockParser matchedBlockParser) {
             this.matchedBlockParser = matchedBlockParser;

@@ -654,13 +654,22 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             return null;
         }
 
-        // We do have enough, extract a text node for each delimiter character.
-        List<Text> delimiters = new ArrayList<>();
+        // Create a text node for each delimiter character using a shared string.
+        String delimStr = String.valueOf(delimiterChar);
+        var delimiters = new ArrayList<Text>(delimiterCount);
         scanner.setPosition(start);
-        Position positionBefore = start;
-        while (scanner.next(delimiterChar)) {
-            delimiters.add(text(positionBefore, scanner.position()));
-            positionBefore = scanner.position();
+        if (includeSourceSpans) {
+            Position positionBefore = start;
+            for (int i = 0; i < delimiterCount; i++) {
+                scanner.next();
+                delimiters.add(text(positionBefore, scanner.position()));
+                positionBefore = scanner.position();
+            }
+        } else {
+            for (int i = 0; i < delimiterCount; i++) {
+                scanner.next();
+                delimiters.add(new Text(delimStr));
+            }
         }
 
         int after = scanner.peekCodePoint();
