@@ -23,7 +23,9 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
     private final boolean[] specialCharacters;
     private final boolean[] linkMarkers;
 
-    private Map<Character, List<InlineContentParser>> inlineParsers;
+    // Map from trigger character to list of parsers. The map structure is built once; on reset() we
+    // replace parser instances in-place (since parsers can be stateful and need fresh instances per block).
+    private final Map<Character, List<InlineContentParser>> inlineParsers;
     private Scanner scanner;
     private boolean includeSourceSpans;
     private int trailingSpaces;
@@ -46,6 +48,15 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         this.linkProcessors = calculateLinkProcessors(context.getCustomLinkProcessors());
         this.linkMarkers = calculateLinkMarkers(context.getCustomLinkMarkers());
         this.specialCharacters = calculateSpecialCharacters(linkMarkers, this.delimiterProcessors.keySet(), this.inlineContentParserFactories);
+
+        // Build the inline parser map structure once. On reset(), we replace parser instances in-place.
+        this.inlineParsers = new HashMap<>();
+        for (var factory : inlineContentParserFactories) {
+            var parser = factory.create();
+            for (var c : factory.getTriggerCharacters()) {
+                inlineParsers.computeIfAbsent(c, k -> new ArrayList<>()).add(parser);
+            }
+        }
     }
 
     private List<InlineContentParserFactory> calculateInlineContentParserFactories(List<InlineContentParserFactory> customFactories) {
@@ -141,15 +152,21 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         return arr;
     }
 
-    private Map<Character, List<InlineContentParser>> createInlineContentParsers() {
-        var map = new HashMap<Character, List<InlineContentParser>>();
+    /**
+     * Reset parser instances in the existing inlineParsers map. The map structure and list sizes
+     * stay the same, only the parser objects are replaced (since they can be stateful).
+     */
+    private void resetInlineContentParsers() {
+        // Clear all lists first, then re-add in the same order as the constructor
+        for (var list : inlineParsers.values()) {
+            list.clear();
+        }
         for (var factory : inlineContentParserFactories) {
             var parser = factory.create();
             for (var c : factory.getTriggerCharacters()) {
-                map.computeIfAbsent(c, k -> new ArrayList<>()).add(parser);
+                inlineParsers.get(c).add(parser);
             }
         }
-        return map;
     }
 
     @Override
@@ -180,7 +197,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         this.trailingSpaces = 0;
         this.lastDelimiter = null;
         this.lastBracket = null;
-        this.inlineParsers = createInlineContentParsers();
+        resetInlineContentParsers();
     }
 
     private Text text(Position start, Position end) {
