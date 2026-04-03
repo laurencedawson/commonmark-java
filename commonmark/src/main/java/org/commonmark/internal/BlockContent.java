@@ -2,28 +2,33 @@ package org.commonmark.internal;
 
 class BlockContent {
 
-    private final StringBuilder sb;
-
-    private int lineCount = 0;
+    private String first;
+    private StringBuilder sb;
 
     public BlockContent() {
-        sb = new StringBuilder();
     }
 
     public BlockContent(String content) {
-        sb = new StringBuilder(content);
+        first = content;
     }
 
     public void add(CharSequence line) {
-        if (lineCount != 0) {
+        if (first == null && sb == null) {
+            first = line.toString();
+        } else {
+            if (sb == null) {
+                sb = new StringBuilder(first);
+                first = null;
+            }
             sb.append('\n');
+            sb.append(line);
         }
-        sb.append(line);
-        lineCount++;
     }
 
     public String getString() {
-        return sb.toString();
+        if (sb != null) return sb.toString();
+        if (first != null) return first;
+        return "";
     }
 
 }
