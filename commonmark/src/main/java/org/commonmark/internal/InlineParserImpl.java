@@ -20,8 +20,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
     private final List<InlineContentParserFactory> inlineContentParserFactories;
     private final Map<Character, DelimiterProcessor> delimiterProcessors;
     private final List<LinkProcessor> linkProcessors;
-    private final BitSet specialCharacters;
-    private final BitSet linkMarkers;
+    private final boolean[] specialCharacters;
+    private final boolean[] linkMarkers;
 
     private Map<Character, List<InlineContentParser>> inlineParsers;
     private Scanner scanner;
@@ -106,32 +106,27 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
     }
 
-    private static BitSet calculateLinkMarkers(Set<Character> linkMarkers) {
-        var bitSet = new BitSet();
-        for (var c : linkMarkers) {
-            bitSet.set(c);
-        }
-        bitSet.set('!');
-        return bitSet;
+    private static boolean[] calculateLinkMarkers(Set<Character> linkMarkers) {
+        var arr = new boolean[128];
+        for (var c : linkMarkers) if (c < 128) arr[c] = true;
+        arr['!'] = true;
+        return arr;
     }
 
-    private static BitSet calculateSpecialCharacters(BitSet linkMarkers,
-                                                     Set<Character> delimiterCharacters,
-                                                     List<InlineContentParserFactory> inlineContentParserFactories) {
-        BitSet bitSet = (BitSet) linkMarkers.clone();
-        for (Character c : delimiterCharacters) {
-            bitSet.set(c);
-        }
+    private static boolean[] calculateSpecialCharacters(boolean[] linkMarkers,
+                                                        Set<Character> delimiterCharacters,
+                                                        List<InlineContentParserFactory> inlineContentParserFactories) {
+        var arr = new boolean[128];
+        System.arraycopy(linkMarkers, 0, arr, 0, 128);
+        for (Character c : delimiterCharacters) if (c < 128) arr[c] = true;
         for (var factory : inlineContentParserFactories) {
-            for (var c : factory.getTriggerCharacters()) {
-                bitSet.set(c);
-            }
+            for (var c : factory.getTriggerCharacters()) if (c < 128) arr[c] = true;
         }
-        bitSet.set('[');
-        bitSet.set(']');
-        bitSet.set('!');
-        bitSet.set('\n');
-        return bitSet;
+        arr['['] = true;
+        arr[']'] = true;
+        arr['!'] = true;
+        arr['\n'] = true;
+        return arr;
     }
 
     private Map<Character, List<InlineContentParser>> createInlineContentParsers() {
@@ -205,7 +200,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
                 return false;
         }
 
-        if (linkMarkers.get(c)) {
+        if (c < 128 && linkMarkers[c]) {
             var markerPosition = scanner.position();
             if (parseLinkMarker(block)) {
                 return true;
@@ -213,7 +208,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             scanner.setPosition(markerPosition);
         }
 
-        if (!specialCharacters.get(c)) {
+        if (!(c < 128 && specialCharacters[c])) {
             block.appendChild(parseText());
             return true;
         }
@@ -610,7 +605,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         char c;
         while (true) {
             c = scanner.peek();
-            if (c == Scanner.END || specialCharacters.get(c)) {
+            if (c == Scanner.END || (c < 128 && specialCharacters[c])) {
                 break;
             }
             scanner.next();

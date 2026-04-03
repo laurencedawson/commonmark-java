@@ -22,9 +22,9 @@ public class LinkReferenceDefinitionParser {
 
     private State state = State.START_DEFINITION;
 
-    private final List<SourceLine> paragraphLines = new ArrayList<>();
-    private final List<LinkReferenceDefinition> definitions = new ArrayList<>();
-    private final List<SourceSpan> sourceSpans = new ArrayList<>();
+    private List<SourceLine> paragraphLines;
+    private List<LinkReferenceDefinition> definitions;
+    private List<SourceSpan> sourceSpans;
 
     private StringBuilder label;
     private String destination;
@@ -33,6 +33,7 @@ public class LinkReferenceDefinitionParser {
     private boolean referenceValid = false;
 
     public void parse(SourceLine line) {
+        if (paragraphLines == null) paragraphLines = new ArrayList<>();
         paragraphLines.add(line);
         if (state == State.PARAGRAPH) {
             // We're in a paragraph now. Link reference definitions can only appear at the beginning, so once
@@ -80,6 +81,7 @@ public class LinkReferenceDefinitionParser {
     }
 
     public void addSourceSpan(SourceSpan sourceSpan) {
+        if (sourceSpans == null) sourceSpans = new ArrayList<>();
         sourceSpans.add(sourceSpan);
     }
 
@@ -87,16 +89,16 @@ public class LinkReferenceDefinitionParser {
      * @return the lines that are normal paragraph content, without newlines
      */
     SourceLines getParagraphLines() {
-        return SourceLines.of(paragraphLines);
+        return paragraphLines != null ? SourceLines.of(paragraphLines) : SourceLines.empty();
     }
 
     List<SourceSpan> getParagraphSourceSpans() {
-        return sourceSpans;
+        return sourceSpans != null ? sourceSpans : List.of();
     }
 
     List<LinkReferenceDefinition> getDefinitions() {
         finishReference();
-        return definitions;
+        return definitions != null ? definitions : List.of();
     }
 
     State getState() {
@@ -104,9 +106,13 @@ public class LinkReferenceDefinitionParser {
     }
 
     List<SourceSpan> removeLines(int lines) {
+        if (sourceSpans == null) {
+            if (paragraphLines != null) removeLast(lines, paragraphLines);
+            return List.of();
+        }
         var removedSpans = Collections.unmodifiableList(new ArrayList<>(
                 sourceSpans.subList(Math.max(sourceSpans.size() - lines, 0), sourceSpans.size())));
-        removeLast(lines, paragraphLines);
+        if (paragraphLines != null) removeLast(lines, paragraphLines);
         removeLast(lines, sourceSpans);
         return removedSpans;
     }
@@ -184,7 +190,7 @@ public class LinkReferenceDefinitionParser {
             // Destination was at end of line, so this is a valid reference for sure (and maybe a title).
             // If not at end of line, wait for title to be valid first.
             referenceValid = true;
-            paragraphLines.clear();
+            if (paragraphLines != null) paragraphLines.clear();
         } else if (whitespace == 0) {
             // spec: The title must be separated from the link destination by whitespace
             return false;
@@ -268,8 +274,11 @@ public class LinkReferenceDefinitionParser {
         String d = Escaping.unescapeString(destination);
         String t = title != null ? Escaping.unescapeString(title.toString()) : null;
         LinkReferenceDefinition definition = new LinkReferenceDefinition(label.toString(), d, t);
-        definition.setSourceSpans(sourceSpans);
-        sourceSpans.clear();
+        if (sourceSpans != null) {
+            definition.setSourceSpans(sourceSpans);
+            sourceSpans.clear();
+        }
+        if (definitions == null) definitions = new ArrayList<>();
         definitions.add(definition);
 
         label = null;
