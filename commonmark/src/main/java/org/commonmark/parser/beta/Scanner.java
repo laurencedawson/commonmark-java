@@ -19,7 +19,7 @@ public class Scanner {
 
     // Lines without newlines at the end. The scanner will yield `\n` between lines because they're significant for
     // parsing and the final output. There is no `\n` after the last line.
-    private final List<SourceLine> lines;
+    private List<SourceLine> lines;
     // Which line we're at.
     private int lineIndex;
     // The index within the line. If index == length(), we pretend that there's a `\n` and only advance after we yield
@@ -42,6 +42,20 @@ public class Scanner {
 
     public static Scanner of(SourceLines lines) {
         return new Scanner(lines.getLines(), 0, 0);
+    }
+
+    /**
+     * Reset this scanner to parse new lines, avoiding a new Scanner allocation.
+     */
+    public void reset(List<SourceLine> lines) {
+        this.lines = lines;
+        this.lineIndex = 0;
+        this.index = 0;
+        if (!lines.isEmpty()) {
+            setLine(lines.get(0));
+        } else {
+            setLine(SourceLine.of("", null));
+        }
     }
 
     public char peek() {

@@ -192,7 +192,11 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
     }
 
     void reset(SourceLines lines) {
-        this.scanner = Scanner.of(lines);
+        if (this.scanner == null) {
+            this.scanner = Scanner.of(lines);
+        } else {
+            this.scanner.reset(lines.getLines());
+        }
         this.includeSourceSpans = !lines.getSourceSpans().isEmpty();
         this.trailingSpaces = 0;
         this.lastDelimiter = null;

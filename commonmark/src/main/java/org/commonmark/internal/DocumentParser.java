@@ -338,11 +338,12 @@ public class DocumentParser implements ParserState {
         columnIsInTab = false;
 
         String lineContent = prepareLine(ln);
-        SourceSpan sourceSpan = null;
         if (includeSourceSpans != IncludeSourceSpans.NONE) {
-            sourceSpan = SourceSpan.of(lineIndex, 0, inputIndex, lineContent.length());
+            SourceSpan sourceSpan = SourceSpan.of(lineIndex, 0, inputIndex, lineContent.length());
+            this.line = SourceLine.of(lineContent, sourceSpan);
+        } else {
+            this.line = SourceLine.of(lineContent);
         }
-        this.line = SourceLine.of(lineContent, sourceSpan);
     }
 
     private void findNextNonSpace() {
