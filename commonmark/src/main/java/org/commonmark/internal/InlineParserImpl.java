@@ -245,20 +245,16 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
     }
 
     private boolean parseDelimiters(Node block, DelimiterProcessor delimiterProcessor, char delimiterChar) {
-        DelimiterData res = scanDelimiters(delimiterProcessor, delimiterChar);
-        if (res == null) {
+        if (!scanDelimiters(delimiterProcessor, delimiterChar)) {
             return false;
         }
 
-        List<Text> characters = res.characters;
-
-        // Add entry to stack for this opener
-        lastDelimiter = new Delimiter(characters, delimiterChar, res.canOpen, res.canClose, lastDelimiter);
+        lastDelimiter = new Delimiter(lastDelimChars, delimiterChar, lastDelimCanOpen, lastDelimCanClose, lastDelimiter);
         if (lastDelimiter.previous != null) {
             lastDelimiter.previous.next = lastDelimiter;
         }
 
-        for (Text text : characters) {
+        for (Text text : lastDelimChars) {
             block.appendChild(text);
         }
         return true;
@@ -376,10 +372,9 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         var afterClose = scanner.position();
 
         // Maybe an inline link/image
-        var destinationTitle = parseInlineDestinationTitle(scanner);
-        if (destinationTitle != null) {
+        if (parseInlineDestinationTitle()) {
             var text = scanner.getContentBetween(opener.contentPosition, beforeClose);
-            return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, null, destinationTitle.destination, destinationTitle.title, afterClose);
+            return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, null, lastDestination, lastTitle, afterClose);
         }
         // Not an inline link/image, rewind back to after `]`.
         scanner.setPosition(afterClose);
@@ -491,33 +486,29 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
     }
 
-    /**
-     * Try to parse the destination and an optional title for an inline link/image.
-     */
-    private static DestinationTitle parseInlineDestinationTitle(Scanner scanner) {
+    private boolean parseInlineDestinationTitle() {
         if (!scanner.next('(')) {
-            return null;
+            return false;
         }
 
         scanner.whitespace();
         String dest = parseLinkDestination(scanner);
         if (dest == null) {
-            return null;
+            return false;
         }
 
         String title = null;
         int whitespace = scanner.whitespace();
-        // title needs a whitespace before
         if (whitespace >= 1) {
             title = parseLinkTitle(scanner);
             scanner.whitespace();
         }
         if (!scanner.next(')')) {
-            // Don't have a closing `)`, so it's not a destination and title.
-            // Note that something like `[foo](` could still be valid later, `(` will just be text.
-            return null;
+            return false;
         }
-        return new DestinationTitle(dest, title);
+        lastDestination = dest;
+        lastTitle = title;
+        return true;
     }
 
     /**
@@ -632,24 +623,25 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         return text;
     }
 
-    /**
-     * Scan a sequence of characters with code delimiterChar, and return information about the number of delimiters
-     * and whether they are positioned such that they can open and/or close emphasis or strong emphasis.
-     *
-     * @return information about delimiter run, or {@code null}
-     */
-    private DelimiterData scanDelimiters(DelimiterProcessor delimiterProcessor, char delimiterChar) {
+    private final Map<Character, Delimiter> openersBottom = new HashMap<>();
+
+    // Reusable fields for scanDelimiters result (avoids DelimiterData allocation)
+    private List<Text> lastDelimChars;
+    private boolean lastDelimCanOpen, lastDelimCanClose;
+
+    // Reusable fields for parseInlineDestinationTitle (avoids DestinationTitle allocation)
+    private String lastDestination, lastTitle;
+
+    private boolean scanDelimiters(DelimiterProcessor delimiterProcessor, char delimiterChar) {
         int before = scanner.peekPreviousCodePoint();
         Position start = scanner.position();
 
-        // Quick check to see if we have enough delimiters.
         int delimiterCount = scanner.matchMultiple(delimiterChar);
         if (delimiterCount < delimiterProcessor.getMinLength()) {
             scanner.setPosition(start);
-            return null;
+            return false;
         }
 
-        // Create a text node for each delimiter character using a shared string.
         String delimStr = String.valueOf(delimiterChar);
         var delimiters = new ArrayList<Text>(delimiterCount);
         scanner.setPosition(start);
@@ -669,7 +661,6 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
         int after = scanner.peekCodePoint();
 
-        // We could be more lazy here, in most cases we don't need to do every match case.
         boolean beforeIsPunctuation = before == Scanner.END || Characters.isPunctuationCodePoint(before);
         boolean beforeIsWhitespace = before == Scanner.END || Characters.isWhitespaceCodePoint(before);
         boolean afterIsPunctuation = after == Scanner.END || Characters.isPunctuationCodePoint(after);
@@ -679,20 +670,17 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
                 (!afterIsPunctuation || beforeIsWhitespace || beforeIsPunctuation);
         boolean rightFlanking = !beforeIsWhitespace &&
                 (!beforeIsPunctuation || afterIsWhitespace || afterIsPunctuation);
-        boolean canOpen;
-        boolean canClose;
+
         if (delimiterChar == '_') {
-            canOpen = leftFlanking && (!rightFlanking || beforeIsPunctuation);
-            canClose = rightFlanking && (!leftFlanking || afterIsPunctuation);
+            lastDelimCanOpen = leftFlanking && (!rightFlanking || beforeIsPunctuation);
+            lastDelimCanClose = rightFlanking && (!leftFlanking || afterIsPunctuation);
         } else {
-            canOpen = leftFlanking && delimiterChar == delimiterProcessor.getOpeningCharacter();
-            canClose = rightFlanking && delimiterChar == delimiterProcessor.getClosingCharacter();
+            lastDelimCanOpen = leftFlanking && delimiterChar == delimiterProcessor.getOpeningCharacter();
+            lastDelimCanClose = rightFlanking && delimiterChar == delimiterProcessor.getClosingCharacter();
         }
-
-        return new DelimiterData(delimiters, canOpen, canClose);
+        lastDelimChars = delimiters;
+        return true;
     }
-
-    private final Map<Character, Delimiter> openersBottom = new HashMap<>();
 
     private void processDelimiters(Delimiter stackBottom) {
         openersBottom.clear();
@@ -882,32 +870,6 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             if (sourceSpans != null) {
                 first.setSourceSpans(sourceSpans.getSourceSpans());
             }
-        }
-    }
-
-    private static class DelimiterData {
-
-        final List<Text> characters;
-        final boolean canClose;
-        final boolean canOpen;
-
-        DelimiterData(List<Text> characters, boolean canOpen, boolean canClose) {
-            this.characters = characters;
-            this.canOpen = canOpen;
-            this.canClose = canClose;
-        }
-    }
-
-    /**
-     * A destination and optional title for a link or image.
-     */
-    private static class DestinationTitle {
-        final String destination;
-        final String title;
-
-        public DestinationTitle(String destination, String title) {
-            this.destination = destination;
-            this.title = title;
         }
     }
 
