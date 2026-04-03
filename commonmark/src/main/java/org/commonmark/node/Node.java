@@ -57,6 +57,22 @@ public abstract class Node {
         }
     }
 
+    /**
+     * Append a newly created child node that is not yet part of any tree.
+     * This is a fast path that skips the {@link #unlink()} call.
+     */
+    public void appendNewChild(Node child) {
+        child.setParent(this);
+        if (this.lastChild != null) {
+            this.lastChild.next = child;
+            child.prev = this.lastChild;
+            this.lastChild = child;
+        } else {
+            this.firstChild = child;
+            this.lastChild = child;
+        }
+    }
+
     public void prependChild(Node child) {
         child.unlink();
         child.setParent(this);

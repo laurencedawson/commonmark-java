@@ -200,13 +200,13 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
         switch (c) {
             case '[':
-                block.appendChild(parseOpenBracket());
+                block.appendNewChild(parseOpenBracket());
                 return true;
             case ']':
-                block.appendChild(parseCloseBracket());
+                block.appendNewChild(parseCloseBracket());
                 return true;
             case '\n':
-                block.appendChild(parseLineBreak());
+                block.appendNewChild(parseLineBreak());
                 return true;
             case Scanner.END:
                 return false;
@@ -221,7 +221,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
 
         if (!(c < 128 && specialCharacters[c])) {
-            block.appendChild(parseText());
+            block.appendNewChild(parseText());
             return true;
         }
 
@@ -237,7 +237,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
                     if (includeSourceSpans && node.getSourceSpans().isEmpty()) {
                         node.setSourceSpans(scanner.getSource(Scanner.positionFromLong(position), scanner.position()).getSourceSpans());
                     }
-                    block.appendChild(node);
+                    block.appendNewChild(node);
                     return true;
                 } else {
                     scanner.setPositionFromLong(position);
@@ -252,7 +252,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             }
         }
 
-        block.appendChild(parseText());
+        block.appendNewChild(parseText());
         return true;
     }
 
@@ -267,7 +267,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
 
         for (Text text : lastDelimChars) {
-            block.appendChild(text);
+            block.appendNewChild(text);
         }
         return true;
     }
@@ -298,8 +298,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             var bracketNode = text(bracketPosition, contentPosition);
 
             addBracket(Bracket.withMarker(bangNode, markerPosition, bracketNode, bracketPosition, contentPosition, lastBracket, lastDelimiter));
-            block.appendChild(bangNode);
-            block.appendChild(bracketNode);
+            block.appendNewChild(bangNode);
+            block.appendNewChild(bracketNode);
             return true;
         } else {
             return false;

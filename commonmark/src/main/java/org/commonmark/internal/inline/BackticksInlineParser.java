@@ -2,7 +2,6 @@ package org.commonmark.internal.inline;
 
 import org.commonmark.node.Code;
 import org.commonmark.node.Text;
-import org.commonmark.parser.SourceLines;
 import org.commonmark.parser.beta.*;
 import org.commonmark.text.Characters;
 
@@ -13,12 +12,23 @@ import java.util.Set;
  */
 public class BackticksInlineParser implements InlineContentParser {
 
+    // Track which backtick counts have been scanned and found to have no closing match.
+    // Bit N set = we scanned for N backticks and found no match, so don't try again.
+    // Supports up to 63 backticks (long has 64 bits, bit 0 unused since 0 backticks is meaningless).
+    private long scannedCounts;
+
     @Override
     public ParsedInline tryParse(InlineParserState inlineParserState) {
         Scanner scanner = inlineParserState.scanner();
         Position start = scanner.position();
         int openingTicks = scanner.matchMultiple('`');
         Position afterOpening = scanner.position();
+
+        // If we already know there's no closing sequence of this length, fail fast
+        if (openingTicks < 64 && (scannedCounts & (1L << openingTicks)) != 0) {
+            Text text = new Text(scanner.getContentBetween(start, afterOpening));
+            return ParsedInline.of(text, afterOpening);
+        }
 
         while (scanner.find('`') > 0) {
             Position beforeClosing = scanner.position();
@@ -29,8 +39,6 @@ public class BackticksInlineParser implements InlineContentParser {
                 String content = scanner.getContentBetween(afterOpening, beforeClosing);
                 content = content.replace('\n', ' ');
 
-                // spec: If the resulting string both begins and ends with a space character, but does not consist
-                // entirely of space characters, a single space character is removed from the front and back.
                 if (content.length() >= 3 &&
                         content.charAt(0) == ' ' &&
                         content.charAt(content.length() - 1) == ' ' &&
@@ -43,7 +51,11 @@ public class BackticksInlineParser implements InlineContentParser {
             }
         }
 
-        // If we got here, we didn't find a matching closing backtick sequence.
+        // No matching closing sequence found. Remember this so we don't rescan.
+        if (openingTicks < 64) {
+            scannedCounts |= (1L << openingTicks);
+        }
+
         Text text = new Text(scanner.getContentBetween(start, afterOpening));
         return ParsedInline.of(text, afterOpening);
     }
