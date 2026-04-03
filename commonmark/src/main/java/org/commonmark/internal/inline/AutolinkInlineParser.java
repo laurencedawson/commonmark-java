@@ -25,8 +25,7 @@ public class AutolinkInlineParser implements InlineContentParser {
         scanner.next();
         Position textStart = scanner.position();
         if (scanner.find('>') > 0) {
-            SourceLines textSource = scanner.getSource(textStart, scanner.position());
-            String content = textSource.getContent();
+            String content = scanner.getContentBetween(textStart, scanner.position());
             scanner.next();
 
             String destination = null;
@@ -39,7 +38,6 @@ public class AutolinkInlineParser implements InlineContentParser {
             if (destination != null) {
                 Link link = new Link(destination, null);
                 Text text = new Text(content);
-                text.setSourceSpans(textSource.getSourceSpans());
                 link.appendChild(text);
                 return ParsedInline.of(link, scanner.position());
             }

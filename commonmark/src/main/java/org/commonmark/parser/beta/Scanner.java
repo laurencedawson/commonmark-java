@@ -236,6 +236,22 @@ public class Scanner {
 
     // For cases where the caller appends the result to a StringBuilder, we could offer another method to avoid some
     // unnecessary copying.
+
+    /**
+     * Get the text content between two positions as a String, avoiding SourceLines allocation.
+     * For single-line spans, extracts the substring directly. Falls back to getSource().getContent() for multi-line.
+     */
+    public String getContentBetween(Position begin, Position end) {
+        if (begin.lineIndex == end.lineIndex) {
+            CharSequence content = lines.get(begin.lineIndex).getContent();
+            if (content instanceof String) {
+                return ((String) content).substring(begin.index, end.index);
+            }
+            return content.subSequence(begin.index, end.index).toString();
+        }
+        return getSource(begin, end).getContent();
+    }
+
     public SourceLines getSource(Position begin, Position end) {
         if (begin.lineIndex == end.lineIndex) {
             // Shortcut for common case of text from a single line

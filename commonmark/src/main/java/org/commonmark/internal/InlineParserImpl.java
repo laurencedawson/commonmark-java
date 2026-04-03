@@ -180,9 +180,11 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         this.inlineParsers = createInlineContentParsers();
     }
 
-    private Text text(SourceLines sourceLines) {
-        Text text = new Text(sourceLines.getContent());
-        text.setSourceSpans(sourceLines.getSourceSpans());
+    private Text text(Position start, Position end) {
+        Text text = new Text(scanner.getContentBetween(start, end));
+        if (includeSourceSpans) {
+            text.setSourceSpans(scanner.getSource(start, end).getSourceSpans());
+        }
         return text;
     }
 
@@ -280,7 +282,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         scanner.next();
         Position contentPosition = scanner.position();
 
-        Text node = text(scanner.getSource(start, contentPosition));
+        Text node = text(start, contentPosition);
 
         // Add entry to stack for this opener
         addBracket(Bracket.link(node, start, contentPosition, lastBracket, lastDelimiter));
@@ -298,8 +300,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         var bracketPosition = scanner.position();
         if (scanner.next('[')) {
             var contentPosition = scanner.position();
-            var bangNode = text(scanner.getSource(markerPosition, bracketPosition));
-            var bracketNode = text(scanner.getSource(bracketPosition, contentPosition));
+            var bangNode = text(markerPosition, bracketPosition);
+            var bracketNode = text(bracketPosition, contentPosition);
 
             // Add entry to stack for this opener
             addBracket(Bracket.withMarker(bangNode, markerPosition, bracketNode, bracketPosition, contentPosition, lastBracket, lastDelimiter));
@@ -322,13 +324,13 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         Bracket opener = lastBracket;
         if (opener == null) {
             // No matching opener, just return a literal.
-            return text(scanner.getSource(beforeClose, afterClose));
+            return text(beforeClose, afterClose);
         }
 
         if (!opener.allowed) {
             // Matching opener, but it's not allowed, just return a literal.
             removeLastBracket();
-            return text(scanner.getSource(beforeClose, afterClose));
+            return text(beforeClose, afterClose);
         }
 
         var linkOrImage = parseLinkOrImage(opener, beforeClose);
@@ -339,7 +341,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
         // Nothing parsed, just parse the bracket as text and continue
         removeLastBracket();
-        return text(scanner.getSource(beforeClose, afterClose));
+        return text(beforeClose, afterClose);
     }
 
     private Node parseLinkOrImage(Bracket opener, Position beforeClose) {
@@ -389,7 +391,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         // Maybe an inline link/image
         var destinationTitle = parseInlineDestinationTitle(scanner);
         if (destinationTitle != null) {
-            var text = scanner.getSource(opener.contentPosition, beforeClose).getContent();
+            var text = scanner.getContentBetween(opener.contentPosition, beforeClose);
             return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, null, destinationTitle.destination, destinationTitle.title, afterClose);
         }
         // Not an inline link/image, rewind back to after `]`.
@@ -412,7 +414,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             return null;
         }
 
-        var text = scanner.getSource(opener.contentPosition, beforeClose).getContent();
+        var text = scanner.getContentBetween(opener.contentPosition, beforeClose);
         return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, label, null, null, afterClose);
     }
 
@@ -544,10 +546,10 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         String dest;
         if (delimiter == '<') {
             // chop off surrounding <..>:
-            String rawDestination = scanner.getSource(start, scanner.position()).getContent();
+            String rawDestination = scanner.getContentBetween(start, scanner.position());
             dest = rawDestination.substring(1, rawDestination.length() - 1);
         } else {
-            dest = scanner.getSource(start, scanner.position()).getContent();
+            dest = scanner.getContentBetween(start, scanner.position());
         }
 
         return Escaping.unescapeString(dest);
@@ -563,7 +565,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
 
         // chop off ', " or parens
-        String rawTitle = scanner.getSource(start, scanner.position()).getContent();
+        String rawTitle = scanner.getContentBetween(start, scanner.position());
         String title = rawTitle.substring(1, rawTitle.length() - 1);
         return Escaping.unescapeString(title);
     }
@@ -586,7 +588,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             return null;
         }
 
-        String content = scanner.getSource(start, end).getContent();
+        String content = scanner.getContentBetween(start, end);
         // spec: A link label can have at most 999 characters inside the square brackets.
         if (content.length() > 999) {
             return null;
@@ -622,8 +624,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             scanner.next();
         }
 
-        SourceLines source = scanner.getSource(start, scanner.position());
-        String content = source.getContent();
+        Position endPos = scanner.position();
+        String content = scanner.getContentBetween(start, endPos);
 
         if (c == '\n') {
             // We parsed until the end of the line. Trim any trailing spaces and remember them (for hard line breaks).
@@ -637,7 +639,9 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
 
         Text text = new Text(content);
-        text.setSourceSpans(source.getSourceSpans());
+        if (includeSourceSpans) {
+            text.setSourceSpans(scanner.getSource(start, endPos).getSourceSpans());
+        }
         return text;
     }
 
@@ -663,7 +667,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         scanner.setPosition(start);
         Position positionBefore = start;
         while (scanner.next(delimiterChar)) {
-            delimiters.add(text(scanner.getSource(positionBefore, scanner.position())));
+            delimiters.add(text(positionBefore, scanner.position()));
             positionBefore = scanner.position();
         }
 
