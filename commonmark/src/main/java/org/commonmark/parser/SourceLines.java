@@ -12,22 +12,24 @@ import java.util.List;
  */
 public class SourceLines {
 
-    private final List<SourceLine> lines = new ArrayList<>();
+    private List<SourceLine> lines;
 
     public static SourceLines empty() {
-        return new SourceLines();
+        return new SourceLines(new ArrayList<>());
     }
 
     public static SourceLines of(SourceLine sourceLine) {
-        SourceLines sourceLines = new SourceLines();
-        sourceLines.addLine(sourceLine);
-        return sourceLines;
+        var lines = new ArrayList<SourceLine>(1);
+        lines.add(sourceLine);
+        return new SourceLines(lines);
     }
 
     public static SourceLines of(List<SourceLine> sourceLines) {
-        SourceLines result = new SourceLines();
-        result.lines.addAll(sourceLines);
-        return result;
+        return new SourceLines(new ArrayList<>(sourceLines));
+    }
+
+    private SourceLines(List<SourceLine> lines) {
+        this.lines = lines;
     }
 
     public void addLine(SourceLine sourceLine) {

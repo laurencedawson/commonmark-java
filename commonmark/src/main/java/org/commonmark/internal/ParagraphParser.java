@@ -48,8 +48,12 @@ public class ParagraphParser extends AbstractBlockParser {
 
     @Override
     public List<DefinitionMap<?>> getDefinitions() {
+        var defs = linkReferenceDefinitionParser.getDefinitions();
+        if (defs.isEmpty()) {
+            return List.of();
+        }
         var map = new DefinitionMap<>(LinkReferenceDefinition.class);
-        for (var def : linkReferenceDefinitionParser.getDefinitions()) {
+        for (var def : defs) {
             map.putIfAbsent(def.getLabel(), def);
         }
         return List.of(map);

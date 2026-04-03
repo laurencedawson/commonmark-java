@@ -211,7 +211,10 @@ public class BlobBenchmarkTest {
             long medianBytes = bytes[5];
             // Estimate object count: assume average 40 bytes per object (16 header + 24 payload on compressed oops)
             long estObjects = medianBytes / 40;
-            System.out.printf("%s (%d chars): %d B, ~%d objects%n", name, input.length(), medianBytes, estObjects);
+            int inputBytes = input.length() * 2; // Java chars are 2 bytes
+            double ratio = (double) medianBytes / inputBytes;
+            System.out.printf("%s (%d chars, %d B input): %d B alloc, %.1fx input, ~%d objects%n",
+                    name, input.length(), inputBytes, medianBytes, ratio, estObjects);
         }
         System.out.println("=========================================");
     }
