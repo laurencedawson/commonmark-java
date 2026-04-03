@@ -2,7 +2,6 @@ package org.commonmark.parser;
 
 import org.commonmark.node.SourceSpan;
 
-import java.util.Objects;
 
 /**
  * A line or part of a line from the input source.
@@ -18,8 +17,12 @@ public class SourceLine {
         return new SourceLine(content, sourceSpan);
     }
 
+    public static SourceLine of(CharSequence content) {
+        return new SourceLine(content, null);
+    }
+
     private SourceLine(CharSequence content, SourceSpan sourceSpan) {
-        this.content = Objects.requireNonNull(content, "content must not be null");
+        this.content = content;
         this.sourceSpan = sourceSpan;
     }
 
@@ -42,6 +45,6 @@ public class SourceLine {
                 newSourceSpan = SourceSpan.of(sourceSpan.getLineIndex(), columnIndex, inputIndex, length);
             }
         }
-        return SourceLine.of(newContent, newSourceSpan);
+        return new SourceLine(newContent, newSourceSpan);
     }
 }

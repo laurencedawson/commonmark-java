@@ -125,8 +125,23 @@ public class AutolinkPostProcessor implements PostProcessor {
         @Override
         public void visit(Text text) {
             if (inLink == 0) {
+                // Merge adjacent Text nodes so URLs with delimiters (e.g. underscores) aren't fragmented
+                mergeAdjacentText(text);
                 linkify(text);
             }
+        }
+
+        private void mergeAdjacentText(Text text) {
+            if (!(text.getNext() instanceof Text)) {
+                return;
+            }
+            StringBuilder sb = new StringBuilder(text.getLiteral());
+            Node next;
+            while ((next = text.getNext()) instanceof Text) {
+                sb.append(((Text) next).getLiteral());
+                next.unlink();
+            }
+            text.setLiteral(sb.toString());
         }
     }
 }
