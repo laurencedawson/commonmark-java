@@ -234,6 +234,7 @@ public class BlobBenchmarkTest {
         String[][] inputs = {
                 {"simple", SIMPLE},
                 {"medium", MEDIUM},
+                {"complex", COMPLEX},
                 {"heavy-inline", HEAVY_INLINE},
                 {"long-doc", LONG_DOC},
         };
@@ -282,6 +283,63 @@ public class BlobBenchmarkTest {
                     .forEach(e -> System.out.printf("  %4d × %s%n", e.getValue(), e.getKey()));
         }
         System.out.println("======================");
+    }
+
+    /**
+     * Break down allocations by phase: block parsing vs inline parsing vs post-processing.
+     */
+    @Test
+    public void allocBreakdown() {
+        // We can't easily separate phases since parse() does everything.
+        // But we can compare parse() vs parseInline() to measure block parser overhead.
+        Parser parser = createParser();
+
+        String[][] inputs = {
+                {"complex", COMPLEX},
+                {"long-doc", LONG_DOC},
+        };
+
+        // Warmup
+        for (String[] entry : inputs) {
+            for (int i = 0; i < 100; i++) {
+                parser.parse(entry[1]);
+            }
+        }
+
+        System.out.println("\n=== Allocation Breakdown ===");
+        for (String[] entry : inputs) {
+            String name = entry[0];
+            String input = entry[1];
+
+            // Measure full parse
+            long[] fullBytes = new long[10];
+            for (int r = 0; r < 10; r++) {
+                long before = getAllocatedBytes();
+                parser.parse(input);
+                fullBytes[r] = getAllocatedBytes() - before;
+            }
+            Arrays.sort(fullBytes);
+            long fullMedian = fullBytes[5];
+
+            // Measure just inline parsing (split into lines, parse each as inline)
+            String[] lines = input.split("\n");
+            long[] inlineBytes = new long[10];
+            for (int r = 0; r < 10; r++) {
+                long before = getAllocatedBytes();
+                for (String line : lines) {
+                    if (!line.isEmpty()) {
+                        parser.parseInline(line);
+                    }
+                }
+                inlineBytes[r] = getAllocatedBytes() - before;
+            }
+            Arrays.sort(inlineBytes);
+            long inlineMedian = inlineBytes[5];
+
+            System.out.printf("%s: full parse %d B, inline-only %d B, block overhead ~%d B%n",
+                    name, fullMedian, inlineMedian, fullMedian - inlineMedian);
+        }
+        System.out.println("============================");
     }
 
     @Test

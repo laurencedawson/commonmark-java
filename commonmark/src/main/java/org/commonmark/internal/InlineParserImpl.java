@@ -297,26 +297,36 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
      * Add open bracket to delimiter stack and add a text node to block's children.
      */
     private Node parseOpenBracket() {
-        Position start = scanner.position();
+        long start = scanner.positionAsLong();
         scanner.next();
-        Position contentPosition = scanner.position();
+        long contentPosition = scanner.positionAsLong();
 
-        Text node = text(start, contentPosition);
+        Text node;
+        if (includeSourceSpans) {
+            node = text(Scanner.positionFromLong(start), Scanner.positionFromLong(contentPosition));
+        } else {
+            node = new Text(scanner.getContentBetweenLong(start, contentPosition));
+        }
 
-        // Add entry to stack for this opener
         addBracket(Bracket.link(node, start, contentPosition, lastBracket, lastDelimiter));
 
         return node;
     }
 
     private boolean parseLinkMarker(Node block) {
-        var markerPosition = scanner.position();
+        long markerPosition = scanner.positionAsLong();
         scanner.next();
-        var bracketPosition = scanner.position();
+        long bracketPosition = scanner.positionAsLong();
         if (scanner.next('[')) {
-            var contentPosition = scanner.position();
-            var bangNode = text(markerPosition, bracketPosition);
-            var bracketNode = text(bracketPosition, contentPosition);
+            long contentPosition = scanner.positionAsLong();
+            Text bangNode, bracketNode;
+            if (includeSourceSpans) {
+                bangNode = text(Scanner.positionFromLong(markerPosition), Scanner.positionFromLong(bracketPosition));
+                bracketNode = text(Scanner.positionFromLong(bracketPosition), Scanner.positionFromLong(contentPosition));
+            } else {
+                bangNode = new Text(scanner.getContentBetweenLong(markerPosition, bracketPosition));
+                bracketNode = new Text(scanner.getContentBetweenLong(bracketPosition, contentPosition));
+            }
 
             addBracket(Bracket.withMarker(bangNode, markerPosition, bracketNode, bracketPosition, contentPosition, lastBracket, lastDelimiter));
             block.appendNewChild(bangNode);
@@ -332,46 +342,53 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
      * plain [ character. If there is a matching delimiter, remove it from the delimiter stack.
      */
     private Node parseCloseBracket() {
-        Position beforeClose = scanner.position();
+        long beforeClose = scanner.positionAsLong();
         scanner.next();
-        Position afterClose = scanner.position();
+        long afterClose = scanner.positionAsLong();
 
         // Get previous `[` or `![`
         Bracket opener = lastBracket;
         if (opener == null) {
-            // No matching opener, just return a literal.
-            return text(beforeClose, afterClose);
+            return textFromLong(beforeClose, afterClose);
         }
 
         if (!opener.allowed) {
-            // Matching opener, but it's not allowed, just return a literal.
             removeLastBracket();
-            return text(beforeClose, afterClose);
+            return textFromLong(beforeClose, afterClose);
         }
 
         var linkOrImage = parseLinkOrImage(opener, beforeClose);
         if (linkOrImage != null) {
             return linkOrImage;
         }
-        scanner.setPosition(afterClose);
+        scanner.setPositionFromLong(afterClose);
 
-        // Nothing parsed, just parse the bracket as text and continue
         removeLastBracket();
-        return text(beforeClose, afterClose);
+        return textFromLong(beforeClose, afterClose);
     }
 
-    private Node parseLinkOrImage(Bracket opener, Position beforeClose) {
+    /**
+     * Create a Text node from long-encoded positions. Includes source spans if enabled.
+     */
+    private Text textFromLong(long start, long end) {
+        Text text = new Text(scanner.getContentBetweenLong(start, end));
+        if (includeSourceSpans) {
+            text.setSourceSpans(scanner.getSource(Scanner.positionFromLong(start), Scanner.positionFromLong(end)).getSourceSpans());
+        }
+        return text;
+    }
+
+    private Node parseLinkOrImage(Bracket opener, long beforeClose) {
         var linkInfo = parseLinkInfo(opener, beforeClose);
         if (linkInfo == null) {
             return null;
         }
-        var processorStartPosition = scanner.position();
+        long processorStartPosition = scanner.positionAsLong();
 
         for (var linkProcessor : linkProcessors) {
             var linkResult = linkProcessor.process(linkInfo, scanner, context);
             if (!(linkResult instanceof LinkResultImpl)) {
-                // Reset position in case the processor used the scanner, and it didn't work out.
-                scanner.setPosition(processorStartPosition);
+                scanner.setPositionFromLong(processorStartPosition);
                 continue;
             }
 
@@ -393,24 +410,18 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         return null;
     }
 
-    private LinkInfo parseLinkInfo(Bracket opener, Position beforeClose) {
-        // Check to see if we have a link (or image, with a ! in front). The different types:
-        // - Inline:       `[foo](/uri)` or with optional title `[foo](/uri "title")`
-        // - Reference links
-        //   - Full:      `[foo][bar]` (foo is the text and bar is the label that needs to match a reference)
-        //   - Collapsed: `[foo][]`    (foo is both the text and label)
-        //   - Shortcut:  `[foo]`      (foo is both the text and label)
-
+    private LinkInfo parseLinkInfo(Bracket opener, long beforeClose) {
         // Starting position is after the closing `]`
-        var afterClose = scanner.position();
+        long afterClose = scanner.positionAsLong();
+        Position afterClosePos = null; // Lazy — only create if we need to return a LinkInfo
 
         // Maybe an inline link/image
         if (parseInlineDestinationTitle()) {
-            var text = scanner.getContentBetween(opener.contentPosition, beforeClose);
-            return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, null, lastDestination, lastTitle, afterClose);
+            var text = scanner.getContentBetweenLong(opener.contentPosition, beforeClose);
+            afterClosePos = Scanner.positionFromLong(afterClose);
+            return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, null, lastDestination, lastTitle, afterClosePos);
         }
-        // Not an inline link/image, rewind back to after `]`.
-        scanner.setPosition(afterClose);
+        scanner.setPositionFromLong(afterClose);
 
         // Maybe a reference link/image like `[foo][bar]`, `[foo][]` or `[foo]`.
         // Note that even `[foo](` could be a valid link if foo is a reference, which is why we try this even if the `(`
@@ -419,18 +430,18 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         // See if there's a link label like `[bar]` or `[]`
         var label = parseLinkLabel(scanner);
         if (label == null) {
-            // No label, rewind back
-            scanner.setPosition(afterClose);
+            scanner.setPositionFromLong(afterClose);
         }
         var textIsReference = label == null || label.isEmpty();
         if (opener.bracketAfter && textIsReference && opener.markerNode == null) {
-            // In case of shortcut or collapsed links, the text is used as the reference. But the reference is not allowed to
-            // contain an unescaped bracket, so if that's the case we don't need to continue. This is an optimization.
             return null;
         }
 
-        var text = scanner.getContentBetween(opener.contentPosition, beforeClose);
-        return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, label, null, null, afterClose);
+        var text = scanner.getContentBetweenLong(opener.contentPosition, beforeClose);
+        if (afterClosePos == null) {
+            afterClosePos = Scanner.positionFromLong(afterClose);
+        }
+        return new LinkInfoImpl(opener.markerNode, opener.bracketNode, text, label, null, null, afterClosePos);
     }
 
     private Node wrapBracket(Bracket opener, Node wrapperNode, boolean includeMarker) {
@@ -443,8 +454,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
 
         if (includeSourceSpans) {
-            var startPosition = includeMarker && opener.markerPosition != null ? opener.markerPosition : opener.bracketPosition;
-            wrapperNode.setSourceSpans(scanner.getSource(startPosition, scanner.position()).getSourceSpans());
+            long startPos = includeMarker && opener.markerPosition >= 0 ? opener.markerPosition : opener.bracketPosition;
+            wrapperNode.setSourceSpans(scanner.getSource(Scanner.positionFromLong(startPos), scanner.position()).getSourceSpans());
         }
 
         // Process delimiters such as emphasis inside link/image
@@ -472,8 +483,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
 
         if (includeSourceSpans) {
-            var startPosition = includeMarker && opener.markerPosition != null ? opener.markerPosition : opener.bracketPosition;
-            node.setSourceSpans(scanner.getSource(startPosition, scanner.position()).getSourceSpans());
+            long startPos = includeMarker && opener.markerPosition >= 0 ? opener.markerPosition : opener.bracketPosition;
+            node.setSourceSpans(scanner.getSource(Scanner.positionFromLong(startPos), scanner.position()).getSourceSpans());
         }
 
         removeLastBracket();
