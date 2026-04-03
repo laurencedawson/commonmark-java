@@ -167,6 +167,47 @@ public class BlobBenchmarkTest {
         return new double[]{times[ROUNDS / 2], allocs[ROUNDS / 2]};
     }
 
+    /**
+     * Count exact allocations for a single parse using ThreadMXBean byte delta
+     * divided by a single iteration. Run with a single parse to get precise per-parse bytes.
+     */
+    @Test
+    public void allocProfile() {
+        Parser parser = createParser();
+
+        String[][] inputs = {
+                {"simple", SIMPLE},
+                {"medium", MEDIUM},
+                {"heavy-inline", HEAVY_INLINE},
+                {"long-doc", LONG_DOC},
+        };
+
+        // Warmup all
+        for (String[] entry : inputs) {
+            for (int i = 0; i < 100; i++) parser.parse(entry[1]);
+        }
+
+        System.out.println("\n=== Allocation Profile (single parse) ===");
+        for (String[] entry : inputs) {
+            String name = entry[0];
+            String input = entry[1];
+
+            // Run 10 single-parse measurements and take median
+            long[] bytes = new long[10];
+            for (int r = 0; r < 10; r++) {
+                long before = getAllocatedBytes();
+                parser.parse(input);
+                bytes[r] = getAllocatedBytes() - before;
+            }
+            Arrays.sort(bytes);
+            long medianBytes = bytes[5];
+            // Estimate object count: assume average 40 bytes per object (16 header + 24 payload on compressed oops)
+            long estObjects = medianBytes / 40;
+            System.out.printf("%s (%d chars): %d B, ~%d objects%n", name, input.length(), medianBytes, estObjects);
+        }
+        System.out.println("=========================================");
+    }
+
     @Test
     public void benchAll() {
         Parser parser = createParser();

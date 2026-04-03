@@ -227,11 +227,56 @@ public class Scanner {
         return new Position(lineIndex, index);
     }
 
+    /**
+     * Return current position encoded as a long to avoid Position object allocation.
+     * Upper 32 bits = lineIndex, lower 32 bits = index.
+     */
+    public long positionAsLong() {
+        return ((long) lineIndex << 32) | (index & 0xFFFFFFFFL);
+    }
+
     public void setPosition(Position position) {
         checkPosition(position.lineIndex, position.index);
         this.lineIndex = position.lineIndex;
         this.index = position.index;
         setLine(lines.get(this.lineIndex));
+    }
+
+    /**
+     * Restore position from a long-encoded value (from {@link #positionAsLong()}).
+     */
+    public void setPositionFromLong(long pos) {
+        int li = (int) (pos >>> 32);
+        int idx = (int) pos;
+        checkPosition(li, idx);
+        this.lineIndex = li;
+        this.index = idx;
+        setLine(lines.get(li));
+    }
+
+    /**
+     * Create a Position object from a long-encoded position.
+     */
+    public static Position positionFromLong(long pos) {
+        return new Position((int) (pos >>> 32), (int) pos);
+    }
+
+    /**
+     * Get text content between two long-encoded positions, avoiding Position object allocation.
+     */
+    public String getContentBetweenLong(long begin, long end) {
+        int beginLine = (int) (begin >>> 32);
+        int endLine = (int) (end >>> 32);
+        int beginIdx = (int) begin;
+        int endIdx = (int) end;
+        if (beginLine == endLine) {
+            CharSequence content = lines.get(beginLine).getContent();
+            if (content instanceof String) {
+                return ((String) content).substring(beginIdx, endIdx);
+            }
+            return content.subSequence(beginIdx, endIdx).toString();
+        }
+        return getSource(new Position(beginLine, beginIdx), new Position(endLine, endIdx)).getContent();
     }
 
     // For cases where the caller appends the result to a StringBuilder, we could offer another method to avoid some

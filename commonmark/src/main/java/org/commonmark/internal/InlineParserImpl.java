@@ -201,11 +201,11 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         }
 
         if (c < 128 && linkMarkers[c]) {
-            var markerPosition = scanner.position();
+            long markerPos = scanner.positionAsLong();
             if (parseLinkMarker(block)) {
                 return true;
             }
-            scanner.setPosition(markerPosition);
+            scanner.setPositionFromLong(markerPos);
         }
 
         if (!(c < 128 && specialCharacters[c])) {
@@ -215,7 +215,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
         List<InlineContentParser> inlineParsers = this.inlineParsers.get(c);
         if (inlineParsers != null) {
-            Position position = scanner.position();
+            long position = scanner.positionAsLong();
             for (InlineContentParser inlineParser : inlineParsers) {
                 ParsedInline parsedInline = inlineParser.tryParse(this);
                 if (parsedInline instanceof ParsedInlineImpl) {
@@ -223,12 +223,12 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
                     Node node = parsedInlineImpl.getNode();
                     scanner.setPosition(parsedInlineImpl.getPosition());
                     if (includeSourceSpans && node.getSourceSpans().isEmpty()) {
-                        node.setSourceSpans(scanner.getSource(position, scanner.position()).getSourceSpans());
+                        node.setSourceSpans(scanner.getSource(Scanner.positionFromLong(position), scanner.position()).getSourceSpans());
                     }
                     block.appendChild(node);
                     return true;
                 } else {
-                    scanner.setPosition(position);
+                    scanner.setPositionFromLong(position);
                 }
             }
         }
@@ -516,36 +516,30 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
      */
     private static String parseLinkDestination(Scanner scanner) {
         char delimiter = scanner.peek();
-        Position start = scanner.position();
+        long start = scanner.positionAsLong();
         if (!LinkScanner.scanLinkDestination(scanner)) {
             return null;
         }
 
         String dest;
         if (delimiter == '<') {
-            // chop off surrounding <..>:
-            String rawDestination = scanner.getContentBetween(start, scanner.position());
+            String rawDestination = scanner.getContentBetweenLong(start, scanner.positionAsLong());
             dest = rawDestination.substring(1, rawDestination.length() - 1);
         } else {
-            dest = scanner.getContentBetween(start, scanner.position());
+            dest = scanner.getContentBetweenLong(start, scanner.positionAsLong());
         }
 
         return Escaping.unescapeString(dest);
     }
 
-    /**
-     * Attempt to parse link title (sans quotes), returning the string or null if no match.
-     */
     private static String parseLinkTitle(Scanner scanner) {
-        Position start = scanner.position();
+        long start = scanner.positionAsLong();
         if (!LinkScanner.scanLinkTitle(scanner)) {
             return null;
         }
 
-        // chop off ', " or parens
-        String rawTitle = scanner.getContentBetween(start, scanner.position());
-        String title = rawTitle.substring(1, rawTitle.length() - 1);
-        return Escaping.unescapeString(title);
+        String rawTitle = scanner.getContentBetweenLong(start, scanner.positionAsLong());
+        return Escaping.unescapeString(rawTitle.substring(1, rawTitle.length() - 1));
     }
 
     /**
@@ -556,17 +550,17 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             return null;
         }
 
-        Position start = scanner.position();
+        long start = scanner.positionAsLong();
         if (!LinkScanner.scanLinkLabelContent(scanner)) {
             return null;
         }
-        Position end = scanner.position();
+        long end = scanner.positionAsLong();
 
         if (!scanner.next(']')) {
             return null;
         }
 
-        String content = scanner.getContentBetween(start, end);
+        String content = scanner.getContentBetweenLong(start, end);
         // spec: A link label can have at most 999 characters inside the square brackets.
         if (content.length() > 999) {
             return null;
@@ -591,7 +585,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
      * Parse the next character as plain text, and possibly more if the following characters are non-special.
      */
     private Node parseText() {
-        Position start = scanner.position();
+        long start = scanner.positionAsLong();
         scanner.next();
         char c;
         while (true) {
@@ -602,23 +596,21 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             scanner.next();
         }
 
-        Position endPos = scanner.position();
-        String content = scanner.getContentBetween(start, endPos);
+        long endPos = scanner.positionAsLong();
+        String content = scanner.getContentBetweenLong(start, endPos);
 
         if (c == '\n') {
-            // We parsed until the end of the line. Trim any trailing spaces and remember them (for hard line breaks).
             int end = Characters.skipBackwards(' ', content, content.length() - 1, 0) + 1;
             trailingSpaces = content.length() - end;
             content = content.substring(0, end);
         } else if (c == Scanner.END) {
-            // For the last line, both tabs and spaces are trimmed for some reason (checked with commonmark.js).
             int end = Characters.skipSpaceTabBackwards(content, content.length() - 1, 0) + 1;
             content = content.substring(0, end);
         }
 
         Text text = new Text(content);
         if (includeSourceSpans) {
-            text.setSourceSpans(scanner.getSource(start, endPos).getSourceSpans());
+            text.setSourceSpans(scanner.getSource(Scanner.positionFromLong(start), Scanner.positionFromLong(endPos)).getSourceSpans());
         }
         return text;
     }
@@ -634,19 +626,19 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
     private boolean scanDelimiters(DelimiterProcessor delimiterProcessor, char delimiterChar) {
         int before = scanner.peekPreviousCodePoint();
-        Position start = scanner.position();
+        long start = scanner.positionAsLong();
 
         int delimiterCount = scanner.matchMultiple(delimiterChar);
         if (delimiterCount < delimiterProcessor.getMinLength()) {
-            scanner.setPosition(start);
+            scanner.setPositionFromLong(start);
             return false;
         }
 
         String delimStr = String.valueOf(delimiterChar);
         var delimiters = new ArrayList<Text>(delimiterCount);
-        scanner.setPosition(start);
+        scanner.setPositionFromLong(start);
         if (includeSourceSpans) {
-            Position positionBefore = start;
+            Position positionBefore = scanner.position();
             for (int i = 0; i < delimiterCount; i++) {
                 scanner.next();
                 delimiters.add(text(positionBefore, scanner.position()));
