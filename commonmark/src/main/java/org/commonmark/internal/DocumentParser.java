@@ -352,6 +352,7 @@ public class DocumentParser implements ParserState {
         index = 0;
         column = 0;
         columnIsInTab = false;
+        nextNonSpaceComputedAtIndex = -1;
 
         String lineContent = prepareLine(ln);
         if (includeSourceSpans != IncludeSourceSpans.NONE) {
@@ -362,7 +363,17 @@ public class DocumentParser implements ParserState {
         }
     }
 
+    // Track the index and column at which findNextNonSpace was last computed
+    private int nextNonSpaceComputedAtIndex = -1;
+    private int nextNonSpaceComputedAtColumn = -1;
+
     private void findNextNonSpace() {
+        if (index == nextNonSpaceComputedAtIndex && column == nextNonSpaceComputedAtColumn) {
+            return;
+        }
+        nextNonSpaceComputedAtIndex = index;
+        nextNonSpaceComputedAtColumn = column;
+
         int i = index;
         int cols = column;
 
@@ -390,8 +401,14 @@ public class DocumentParser implements ParserState {
     }
 
     private void setNewIndex(int newIndex) {
+        if (newIndex == nextNonSpace) {
+            // Common case: jumping to the first non-space character
+            index = nextNonSpace;
+            column = nextNonSpaceColumn;
+            columnIsInTab = false;
+            return;
+        }
         if (newIndex >= nextNonSpace) {
-            // We can start from here, no need to calculate tab stops again
             index = nextNonSpace;
             column = nextNonSpaceColumn;
         }
@@ -399,7 +416,6 @@ public class DocumentParser implements ParserState {
         while (index < newIndex && index != length) {
             advance();
         }
-        // If we're going to an index as opposed to a column, we're never within a tab
         columnIsInTab = false;
     }
 
