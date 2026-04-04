@@ -19,6 +19,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
     private final InlineParserContext context;
     private final List<InlineContentParserFactory> inlineContentParserFactories;
     private final Map<Character, DelimiterProcessor> delimiterProcessors;
+    // Array-based lookup for delimiter processors (avoids HashMap + autoboxing in hot path)
+    private final DelimiterProcessor[] delimiterProcessorsByChar;
     private final List<LinkProcessor> linkProcessors;
     private final boolean[] specialCharacters;
     private final boolean[] linkMarkers;
@@ -26,6 +28,9 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
     // Map from trigger character to list of parsers. The map structure is built once; on reset() we
     // replace parser instances in-place (since parsers can be stateful and need fresh instances per block).
     private final Map<Character, List<InlineContentParser>> inlineParsers;
+    // Array-based lookup for inline parsers (avoids HashMap + autoboxing in hot path)
+    @SuppressWarnings("unchecked")
+    private final List<InlineContentParser>[] inlineParsersByChar = new List[128];
     private Scanner scanner;
     private boolean includeSourceSpans;
     private int trailingSpaces;
@@ -49,12 +54,28 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         this.linkMarkers = calculateLinkMarkers(context.getCustomLinkMarkers());
         this.specialCharacters = calculateSpecialCharacters(linkMarkers, this.delimiterProcessors.keySet(), this.inlineContentParserFactories);
 
+        // Build array-based delimiter processor lookup for hot path
+        this.delimiterProcessorsByChar = new DelimiterProcessor[128];
+        for (var entry : this.delimiterProcessors.entrySet()) {
+            char c = entry.getKey();
+            if (c < 128) {
+                delimiterProcessorsByChar[c] = entry.getValue();
+            }
+        }
+
         // Build the inline parser map structure once. On reset(), we replace parser instances in-place.
         this.inlineParsers = new HashMap<>();
         for (var factory : inlineContentParserFactories) {
             var parser = factory.create();
             for (var c : factory.getTriggerCharacters()) {
                 inlineParsers.computeIfAbsent(c, k -> new ArrayList<>()).add(parser);
+            }
+        }
+        // Populate array-based lookup
+        for (var entry : inlineParsers.entrySet()) {
+            char c = entry.getKey();
+            if (c < 128) {
+                inlineParsersByChar[c] = entry.getValue();
             }
         }
     }
@@ -246,7 +267,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             return true;
         }
 
-        List<InlineContentParser> inlineParsers = this.inlineParsers.get(c);
+        List<InlineContentParser> inlineParsers = c < 128 ? inlineParsersByChar[c] : this.inlineParsers.get(c);
         if (inlineParsers != null) {
             long position = scanner.positionAsLong();
             for (InlineContentParser inlineParser : inlineParsers) {
@@ -266,7 +287,7 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             }
         }
 
-        DelimiterProcessor delimiterProcessor = delimiterProcessors.get(c);
+        DelimiterProcessor delimiterProcessor = c < 128 ? delimiterProcessorsByChar[c] : delimiterProcessors.get(c);
         if (delimiterProcessor != null) {
             if (parseDelimiters(block, delimiterProcessor, c)) {
                 return true;
