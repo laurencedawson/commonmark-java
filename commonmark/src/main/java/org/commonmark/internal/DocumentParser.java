@@ -402,7 +402,6 @@ public class DocumentParser implements ParserState {
 
     private void setNewIndex(int newIndex) {
         if (newIndex == nextNonSpace) {
-            // Common case: jumping to the first non-space character
             index = nextNonSpace;
             column = nextNonSpaceColumn;
             columnIsInTab = false;
@@ -412,22 +411,34 @@ public class DocumentParser implements ParserState {
             index = nextNonSpace;
             column = nextNonSpaceColumn;
         }
-        int length = line.getContent().length();
-        while (index < newIndex && index != length) {
-            advance();
+        // Inline advance loop to avoid method call overhead per character
+        CharSequence content = line.getContent();
+        int length = content.length();
+        while (index < newIndex && index < length) {
+            if (content.charAt(index) == '\t') {
+                column += Parsing.columnsToNextTabStop(column);
+            } else {
+                column++;
+            }
+            index++;
         }
         columnIsInTab = false;
     }
 
     private void setNewColumn(int newColumn) {
         if (newColumn >= nextNonSpaceColumn) {
-            // We can start from here, no need to calculate tab stops again
             index = nextNonSpace;
             column = nextNonSpaceColumn;
         }
-        int length = line.getContent().length();
-        while (column < newColumn && index != length) {
-            advance();
+        CharSequence content = line.getContent();
+        int length = content.length();
+        while (column < newColumn && index < length) {
+            if (content.charAt(index) == '\t') {
+                column += Parsing.columnsToNextTabStop(column);
+            } else {
+                column++;
+            }
+            index++;
         }
         if (column > newColumn) {
             // Last character was a tab and we overshot our target
