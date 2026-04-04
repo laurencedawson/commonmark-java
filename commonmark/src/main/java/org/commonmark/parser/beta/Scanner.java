@@ -27,7 +27,10 @@ public class Scanner {
     private int index;
 
     // Current line or "" if at the end of the lines (using "" instead of null saves a null check)
-    private SourceLine line = SourceLine.of("", null);
+    private static final SourceLine EMPTY_LINE = SourceLine.of("", null);
+
+    private SourceLine line = EMPTY_LINE;
+    private CharSequence lineContent = "";
     private int lineLength = 0;
 
     Scanner(List<SourceLine> lines, int lineIndex, int index) {
@@ -54,13 +57,13 @@ public class Scanner {
         if (!lines.isEmpty()) {
             setLine(lines.get(0));
         } else {
-            setLine(SourceLine.of("", null));
+            setLine(EMPTY_LINE);
         }
     }
 
     public char peek() {
         if (index < lineLength) {
-            return line.getContent().charAt(index);
+            return lineContent.charAt(index);
         } else {
             if (lineIndex < lines.size() - 1) {
                 return '\n';
@@ -73,9 +76,9 @@ public class Scanner {
 
     public int peekCodePoint() {
         if (index < lineLength) {
-            char c = line.getContent().charAt(index);
+            char c = lineContent.charAt(index);
             if (Character.isHighSurrogate(c) && index + 1 < lineLength) {
-                char low = line.getContent().charAt(index + 1);
+                char low = lineContent.charAt(index + 1);
                 if (Character.isLowSurrogate(low)) {
                     return Character.toCodePoint(c, low);
                 }
@@ -94,9 +97,9 @@ public class Scanner {
     public int peekPreviousCodePoint() {
         if (index > 0) {
             int prev = index - 1;
-            char c = line.getContent().charAt(prev);
+            char c = lineContent.charAt(prev);
             if (Character.isLowSurrogate(c) && prev > 0) {
-                char high = line.getContent().charAt(prev - 1);
+                char high = lineContent.charAt(prev - 1);
                 if (Character.isHighSurrogate(high)) {
                     return Character.toCodePoint(high, c);
                 }
@@ -127,7 +130,7 @@ public class Scanner {
             if (lineIndex < lines.size()) {
                 setLine(lines.get(lineIndex));
             } else {
-                setLine(SourceLine.of("", null));
+                setLine(EMPTY_LINE);
             }
             index = 0;
         }
@@ -159,7 +162,7 @@ public class Scanner {
         if (index < lineLength && index + content.length() <= lineLength) {
             // Can't use startsWith because it's not available on CharSequence
             for (int i = 0; i < content.length(); i++) {
-                if (line.getContent().charAt(index + i) != content.charAt(i)) {
+                if (lineContent.charAt(index + i) != content.charAt(i)) {
                     return false;
                 }
             }
@@ -315,7 +318,7 @@ public class Scanner {
         if (begin.lineIndex == end.lineIndex) {
             // Shortcut for common case of text from a single line
             SourceLine line = lines.get(begin.lineIndex);
-            CharSequence newContent = line.getContent().subSequence(begin.index, end.index);
+            CharSequence newContent = lineContent.subSequence(begin.index, end.index);
             SourceSpan newSourceSpan = null;
             SourceSpan sourceSpan = line.getSourceSpan();
             if (sourceSpan != null) {
@@ -341,7 +344,8 @@ public class Scanner {
 
     private void setLine(SourceLine line) {
         this.line = line;
-        this.lineLength = line.getContent().length();
+        this.lineContent = line.getContent();
+        this.lineLength = lineContent.length();
     }
 
     private void checkPosition(int lineIndex, int index) {
@@ -349,8 +353,9 @@ public class Scanner {
             throw new IllegalArgumentException("Line index " + lineIndex + " out of range, number of lines: " + lines.size());
         }
         SourceLine line = lines.get(lineIndex);
-        if (index < 0 || index > line.getContent().length()) {
-            throw new IllegalArgumentException("Index " + index + " out of range, line length: " + line.getContent().length());
+        int len = line.getContent().length();
+        if (index < 0 || index > len) {
+            throw new IllegalArgumentException("Index " + index + " out of range, line length: " + len);
         }
     }
 }
