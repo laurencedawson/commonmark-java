@@ -286,60 +286,66 @@ public class BlobBenchmarkTest {
     }
 
     /**
-     * Break down allocations by phase: block parsing vs inline parsing vs post-processing.
+     * Break down time and allocations by phase for complex input.
      */
     @Test
-    public void allocBreakdown() {
-        // We can't easily separate phases since parse() does everything.
-        // But we can compare parse() vs parseInline() to measure block parser overhead.
+    public void complexBreakdown() {
         Parser parser = createParser();
-
-        String[][] inputs = {
-                {"complex", COMPLEX},
-                {"long-doc", LONG_DOC},
-        };
+        String input = COMPLEX;
 
         // Warmup
-        for (String[] entry : inputs) {
-            for (int i = 0; i < 100; i++) {
-                parser.parse(entry[1]);
-            }
+        for (int i = 0; i < WARMUP; i++) {
+            parser.parse(input);
         }
 
-        System.out.println("\n=== Allocation Breakdown ===");
-        for (String[] entry : inputs) {
-            String name = entry[0];
-            String input = entry[1];
-
-            // Measure full parse
-            long[] fullBytes = new long[10];
-            for (int r = 0; r < 10; r++) {
-                long before = getAllocatedBytes();
+        // Full parse timing
+        double[] fullTimes = new double[ROUNDS];
+        long[] fullAllocs = new long[ROUNDS];
+        for (int r = 0; r < ROUNDS; r++) {
+            long allocBefore = getAllocatedBytes();
+            long start = System.nanoTime();
+            for (int i = 0; i < ITERATIONS; i++) {
                 parser.parse(input);
-                fullBytes[r] = getAllocatedBytes() - before;
             }
-            Arrays.sort(fullBytes);
-            long fullMedian = fullBytes[5];
-
-            // Measure just inline parsing (split into lines, parse each as inline)
-            String[] lines = input.split("\n");
-            long[] inlineBytes = new long[10];
-            for (int r = 0; r < 10; r++) {
-                long before = getAllocatedBytes();
-                for (String line : lines) {
-                    if (!line.isEmpty()) {
-                        parser.parseInline(line);
-                    }
-                }
-                inlineBytes[r] = getAllocatedBytes() - before;
-            }
-            Arrays.sort(inlineBytes);
-            long inlineMedian = inlineBytes[5];
-
-            System.out.printf("%s: full parse %d B, inline-only %d B, block overhead ~%d B%n",
-                    name, fullMedian, inlineMedian, fullMedian - inlineMedian);
+            long elapsed = System.nanoTime() - start;
+            long allocAfter = getAllocatedBytes();
+            fullTimes[r] = elapsed / 1000.0 / ITERATIONS;
+            fullAllocs[r] = (allocAfter - allocBefore) / ITERATIONS;
         }
-        System.out.println("============================");
+        Arrays.sort(fullTimes);
+        Arrays.sort(fullAllocs);
+
+        // parseParagraphs timing (inline-only, skips block parser)
+        // Not equivalent to complex since complex has block structure,
+        // but shows the inline parsing floor
+        String paragraphsOnly = input.replaceAll("(?m)^[#>\\-+*`|\\d].*\n?", "");
+        for (int i = 0; i < WARMUP; i++) {
+            parser.parseParagraphs(paragraphsOnly);
+        }
+        double[] inlineTimes = new double[ROUNDS];
+        long[] inlineAllocs = new long[ROUNDS];
+        for (int r = 0; r < ROUNDS; r++) {
+            long allocBefore = getAllocatedBytes();
+            long start = System.nanoTime();
+            for (int i = 0; i < ITERATIONS; i++) {
+                parser.parseParagraphs(paragraphsOnly);
+            }
+            long elapsed = System.nanoTime() - start;
+            long allocAfter = getAllocatedBytes();
+            inlineTimes[r] = elapsed / 1000.0 / ITERATIONS;
+            inlineAllocs[r] = (allocAfter - allocBefore) / ITERATIONS;
+        }
+        Arrays.sort(inlineTimes);
+        Arrays.sort(inlineAllocs);
+
+        System.out.println("\n=== Complex Breakdown ===");
+        System.out.printf("Full parse:     %.1f us, %d B/iter%n", fullTimes[ROUNDS / 2], fullAllocs[ROUNDS / 2]);
+        System.out.printf("Inline only:    %.1f us, %d B/iter (paragraphs extracted: %d chars)%n",
+                inlineTimes[ROUNDS / 2], inlineAllocs[ROUNDS / 2], paragraphsOnly.length());
+        System.out.printf("Block overhead: ~%.1f us, ~%d B/iter%n",
+                fullTimes[ROUNDS / 2] - inlineTimes[ROUNDS / 2],
+                fullAllocs[ROUNDS / 2] - inlineAllocs[ROUNDS / 2]);
+        System.out.println("=========================");
     }
 
     @Test

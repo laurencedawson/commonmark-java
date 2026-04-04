@@ -87,6 +87,19 @@ public class DocumentParser implements ParserState {
                           List<InlineContentParserFactory> inlineContentParserFactories, List<DelimiterProcessor> delimiterProcessors,
                           List<LinkProcessor> linkProcessors, Set<Character> linkMarkers,
                           IncludeSourceSpans includeSourceSpans, int maxOpenBlockParsers) {
+        this(blockParserFactories, inlineParserFactory, inlineContentParserFactories, delimiterProcessors,
+                linkProcessors, linkMarkers, includeSourceSpans, maxOpenBlockParsers,
+                buildCharToFactories(blockParserFactories),
+                buildAlwaysTryFactories(blockParserFactories),
+                buildIndentedFactories(blockParserFactories));
+    }
+
+    public DocumentParser(List<BlockParserFactory> blockParserFactories, InlineParserFactory inlineParserFactory,
+                          List<InlineContentParserFactory> inlineContentParserFactories, List<DelimiterProcessor> delimiterProcessors,
+                          List<LinkProcessor> linkProcessors, Set<Character> linkMarkers,
+                          IncludeSourceSpans includeSourceSpans, int maxOpenBlockParsers,
+                          BlockParserFactory[][] charToFactories, BlockParserFactory[] alwaysTryFactories,
+                          BlockParserFactory[] indentedFactories) {
         this.blockParserFactories = blockParserFactories;
         this.inlineParserFactory = inlineParserFactory;
         this.inlineContentParserFactories = inlineContentParserFactories;
@@ -95,6 +108,9 @@ public class DocumentParser implements ParserState {
         this.linkMarkers = linkMarkers;
         this.includeSourceSpans = includeSourceSpans;
         this.maxOpenBlockParsers = maxOpenBlockParsers;
+        this.charToFactories = charToFactories;
+        this.alwaysTryFactoriesArr = alwaysTryFactories;
+        this.indentedFactoriesArr = indentedFactories;
 
         this.documentBlockParser = new DocumentBlockParser();
         activateBlockParser(new OpenBlockParser(documentBlockParser, 0));
@@ -466,17 +482,126 @@ public class DocumentParser implements ParserState {
 
     private final MatchedBlockParserImpl reusableMatchedBlockParser = new MatchedBlockParserImpl(null);
 
+    // Dispatch table: for each ASCII character, which factories could possibly match a line starting with it.
+    // Built once per factory configuration (shared across parse calls).
+    private final BlockParserFactory[][] charToFactories;
+    private final BlockParserFactory[] alwaysTryFactoriesArr;
+    private final BlockParserFactory[] indentedFactoriesArr;
+
+    @SuppressWarnings("unchecked")
+    public static BlockParserFactory[][] buildCharToFactories(List<BlockParserFactory> blockParserFactories) {
+        List<BlockParserFactory>[] tempCharMap = new List[128];
+        for (BlockParserFactory factory : blockParserFactories) {
+            if (factory instanceof BlockQuoteParser.Factory) {
+                addToCharMap(tempCharMap, '>', factory);
+            } else if (factory instanceof HeadingParser.Factory) {
+                addToCharMap(tempCharMap, '#', factory);
+                addToCharMap(tempCharMap, '-', factory);
+                addToCharMap(tempCharMap, '=', factory);
+            } else if (factory instanceof FencedCodeBlockParser.Factory) {
+                addToCharMap(tempCharMap, '`', factory);
+                addToCharMap(tempCharMap, '~', factory);
+            } else if (factory instanceof HtmlBlockParser.Factory) {
+                addToCharMap(tempCharMap, '<', factory);
+            } else if (factory instanceof ThematicBreakParser.Factory) {
+                addToCharMap(tempCharMap, '-', factory);
+                addToCharMap(tempCharMap, '_', factory);
+                addToCharMap(tempCharMap, '*', factory);
+            } else if (factory instanceof ListBlockParser.Factory) {
+                addToCharMap(tempCharMap, '-', factory);
+                addToCharMap(tempCharMap, '+', factory);
+                addToCharMap(tempCharMap, '*', factory);
+                for (char c = '0'; c <= '9'; c++) {
+                    addToCharMap(tempCharMap, c, factory);
+                }
+            }
+            // IndentedCodeBlockParser and unknown factories handled separately
+        }
+        BlockParserFactory[][] result = new BlockParserFactory[128][];
+        for (int i = 0; i < 128; i++) {
+            if (tempCharMap[i] != null) {
+                result[i] = tempCharMap[i].toArray(new BlockParserFactory[0]);
+            }
+        }
+        return result;
+    }
+
+    public static BlockParserFactory[] buildAlwaysTryFactories(List<BlockParserFactory> blockParserFactories) {
+        List<BlockParserFactory> result = new ArrayList<>();
+        for (BlockParserFactory factory : blockParserFactories) {
+            if (!(factory instanceof BlockQuoteParser.Factory) &&
+                    !(factory instanceof HeadingParser.Factory) &&
+                    !(factory instanceof FencedCodeBlockParser.Factory) &&
+                    !(factory instanceof HtmlBlockParser.Factory) &&
+                    !(factory instanceof ThematicBreakParser.Factory) &&
+                    !(factory instanceof ListBlockParser.Factory) &&
+                    !(factory instanceof IndentedCodeBlockParser.Factory)) {
+                result.add(factory);
+            }
+        }
+        return result.toArray(new BlockParserFactory[0]);
+    }
+
+    public static BlockParserFactory[] buildIndentedFactories(List<BlockParserFactory> blockParserFactories) {
+        List<BlockParserFactory> result = new ArrayList<>();
+        for (BlockParserFactory factory : blockParserFactories) {
+            if (factory instanceof IndentedCodeBlockParser.Factory) {
+                result.add(factory);
+            }
+        }
+        return result.toArray(new BlockParserFactory[0]);
+    }
+
+    private static void addToCharMap(List<BlockParserFactory>[] map, char c, BlockParserFactory factory) {
+        if (map[c] == null) {
+            map[c] = new ArrayList<>(3);
+        }
+        if (!map[c].contains(factory)) {
+            map[c].add(factory);
+        }
+    }
+
     private BlockStartImpl findBlockStart(BlockParser blockParser) {
         if (openBlockParsers.size() > maxOpenBlockParsers) {
             return null;
         }
         reusableMatchedBlockParser.matchedBlockParser = blockParser;
-        for (BlockParserFactory blockParserFactory : blockParserFactories) {
-            BlockStart result = blockParserFactory.tryStart(this, reusableMatchedBlockParser);
+
+        // Try extension factories that we can't dispatch by character
+        for (BlockParserFactory factory : alwaysTryFactoriesArr) {
+            BlockStart result = factory.tryStart(this, reusableMatchedBlockParser);
             if (result instanceof BlockStartImpl) {
                 return (BlockStartImpl) result;
             }
         }
+
+        // Dispatch by indent level
+        if (indent >= Parsing.CODE_BLOCK_INDENT) {
+            for (BlockParserFactory factory : indentedFactoriesArr) {
+                BlockStart result = factory.tryStart(this, reusableMatchedBlockParser);
+                if (result instanceof BlockStartImpl) {
+                    return (BlockStartImpl) result;
+                }
+            }
+        }
+
+        // Dispatch by first character
+        CharSequence lineContent = line.getContent();
+        if (nextNonSpace < lineContent.length()) {
+            char firstChar = lineContent.charAt(nextNonSpace);
+            if (firstChar < 128) {
+                BlockParserFactory[] factories = charToFactories[firstChar];
+                if (factories != null) {
+                    for (BlockParserFactory factory : factories) {
+                        BlockStart result = factory.tryStart(this, reusableMatchedBlockParser);
+                        if (result instanceof BlockStartImpl) {
+                            return (BlockStartImpl) result;
+                        }
+                    }
+                }
+            }
+        }
+
         return null;
     }
 

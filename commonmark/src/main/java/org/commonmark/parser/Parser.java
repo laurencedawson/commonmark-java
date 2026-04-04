@@ -42,6 +42,11 @@ public class Parser {
     // Cached inline parser for fast-path parsing (not thread-safe).
     private final InlineParser cachedInlineParser;
 
+    // Pre-built block parser dispatch tables (shared across parse calls, thread-safe since immutable).
+    private final BlockParserFactory[][] blockCharToFactories;
+    private final BlockParserFactory[] blockAlwaysTryFactories;
+    private final BlockParserFactory[] blockIndentedFactories;
+
     private Parser(Builder builder) {
         this.blockParserFactories = DocumentParser.calculateBlockParserFactories(builder.blockParserFactories, builder.enabledBlockTypes);
         this.inlineParserFactory = builder.getInlineParserFactory();
@@ -52,6 +57,11 @@ public class Parser {
         this.linkMarkers = builder.linkMarkers;
         this.includeSourceSpans = builder.includeSourceSpans;
         this.maxOpenBlockParsers = builder.maxOpenBlockParsers;
+
+        // Build block dispatch tables once
+        this.blockCharToFactories = DocumentParser.buildCharToFactories(blockParserFactories);
+        this.blockAlwaysTryFactories = DocumentParser.buildAlwaysTryFactories(blockParserFactories);
+        this.blockIndentedFactories = DocumentParser.buildIndentedFactories(blockParserFactories);
 
         var context = new InlineParserContextImpl(
                 inlineContentParserFactories, delimiterProcessors, linkProcessors, linkMarkers, new Definitions());
@@ -201,7 +211,8 @@ public class Parser {
 
     private DocumentParser createDocumentParser() {
         return new DocumentParser(blockParserFactories, inlineParserFactory, inlineContentParserFactories,
-                delimiterProcessors, linkProcessors, linkMarkers, includeSourceSpans, maxOpenBlockParsers);
+                delimiterProcessors, linkProcessors, linkMarkers, includeSourceSpans, maxOpenBlockParsers,
+                blockCharToFactories, blockAlwaysTryFactories, blockIndentedFactories);
     }
 
     private Node postProcess(Node document) {
