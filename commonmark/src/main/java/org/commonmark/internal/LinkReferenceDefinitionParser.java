@@ -43,6 +43,26 @@ public class LinkReferenceDefinitionParser {
             return;
         }
 
+        // Fast pre-check: if we're in START_DEFINITION state, the line must start with
+        // optional whitespace followed by '['. Skip Scanner creation if it doesn't.
+        if (state == State.START_DEFINITION) {
+            CharSequence content = line.getContent();
+            boolean hasOpenBracket = false;
+            for (int i = 0; i < content.length(); i++) {
+                char c = content.charAt(i);
+                if (c == '[') {
+                    hasOpenBracket = true;
+                    break;
+                } else if (c != ' ' && c != '\t') {
+                    break;
+                }
+            }
+            if (!hasOpenBracket) {
+                state = State.PARAGRAPH;
+                return;
+            }
+        }
+
         Scanner scanner = Scanner.of(SourceLines.of(line));
         while (scanner.hasNext()) {
             boolean success;
