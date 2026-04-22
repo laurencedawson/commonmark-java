@@ -4,6 +4,14 @@ import org.commonmark.parser.beta.Scanner;
 
 public class LinkScanner {
 
+    // Lookup table for escapable characters (ASCII only). Much faster than switch statement.
+    private static final boolean[] ESCAPABLE = new boolean[128];
+    static {
+        for (char c : "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".toCharArray()) {
+            ESCAPABLE[c] = true;
+        }
+    }
+
     /**
      * Attempt to scan the contents of a link label (inside the brackets), stopping after the content or returning false.
      * The stopped position can bei either the closing {@code ]}, or the end of the line if the label continues on
@@ -162,41 +170,6 @@ public class LinkScanner {
     }
 
     private static boolean isEscapable(char c) {
-        switch (c) {
-            case '!':
-            case '"':
-            case '#':
-            case '$':
-            case '%':
-            case '&':
-            case '\'':
-            case '(':
-            case ')':
-            case '*':
-            case '+':
-            case ',':
-            case '-':
-            case '.':
-            case '/':
-            case ':':
-            case ';':
-            case '<':
-            case '=':
-            case '>':
-            case '?':
-            case '@':
-            case '[':
-            case '\\':
-            case ']':
-            case '^':
-            case '_':
-            case '`':
-            case '{':
-            case '|':
-            case '}':
-            case '~':
-                return true;
-        }
-        return false;
+        return c < 128 && ESCAPABLE[c];
     }
 }

@@ -48,28 +48,31 @@ public abstract class EmphasisDelimiterProcessor implements DelimiterProcessor {
         }
 
         Text opener = openingRun.getOpener();
-        boolean trackSourceSpans = !opener.getSourceSpans().isEmpty();
-
-        SourceSpans sourceSpans = null;
-        if (trackSourceSpans) {
-            sourceSpans = SourceSpans.empty();
-            sourceSpans.addAllFrom(openingRun.getOpeners(usedDelimiters));
-        }
-
         Node closerNode = closingRun.getCloser();
-        Node n = opener.getNext();
-        while (n != null && n != closerNode) {
-            Node next = n.getNext();
-            emphasis.appendChild(n);
-            if (sourceSpans != null) {
-                sourceSpans.addAll(n.getSourceSpans());
-            }
-            n = next;
-        }
 
-        if (sourceSpans != null) {
+        if (!opener.getSourceSpans().isEmpty()) {
+            // Source spans tracking path — less common
+            SourceSpans sourceSpans = SourceSpans.empty();
+            sourceSpans.addAllFrom(openingRun.getOpeners(usedDelimiters));
+
+            Node n = opener.getNext();
+            while (n != null && n != closerNode) {
+                Node next = n.getNext();
+                emphasis.appendChild(n);
+                sourceSpans.addAll(n.getSourceSpans());
+                n = next;
+            }
+
             sourceSpans.addAllFrom(closingRun.getClosers(usedDelimiters));
             emphasis.setSourceSpans(sourceSpans.getSourceSpans());
+        } else {
+            // Fast path — no source spans, just append children
+            Node n = opener.getNext();
+            while (n != null && n != closerNode) {
+                Node next = n.getNext();
+                emphasis.appendChild(n);
+                n = next;
+            }
         }
         opener.insertAfter(emphasis);
 

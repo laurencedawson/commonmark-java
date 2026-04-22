@@ -41,8 +41,15 @@ public class Characters {
     }
 
     public static boolean isLetter(CharSequence s, int index) {
-        int codePoint = Character.codePointAt(s, index);
-        return Character.isLetter(codePoint);
+        if (index >= s.length()) {
+            return false;
+        }
+        char c = s.charAt(index);
+        // Fast path for ASCII (markdown is mostly ASCII)
+        if (c < 128) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        }
+        return Character.isLetter(Character.codePointAt(s, index));
     }
 
     public static boolean isSpaceOrTab(CharSequence s, int index) {
