@@ -378,9 +378,10 @@ public class DocumentParser implements ParserState {
         int cols = column;
 
         blank = true;
-        int length = line.getContent().length();
+        CharSequence content = line.getContent();
+        int length = content.length();
         while (i < length) {
-            char c = line.getContent().charAt(i);
+            char c = content.charAt(i);
             switch (c) {
                 case ' ':
                     i++;
@@ -465,11 +466,13 @@ public class DocumentParser implements ParserState {
      * calling this.
      */
     private void addLine() {
+        CharSequence lineContent = line.getContent();
+        int lineLen = lineContent.length();
         CharSequence content;
         if (columnIsInTab) {
             // Our column is in a partially consumed tab. Expand the remaining columns (to the next tab stop) to spaces.
             int afterTab = index + 1;
-            CharSequence rest = line.getContent().subSequence(afterTab, line.getContent().length());
+            CharSequence rest = lineContent.subSequence(afterTab, lineLen);
             int spaces = Parsing.columnsToNextTabStop(column);
             StringBuilder sb = new StringBuilder(spaces + rest.length());
             for (int i = 0; i < spaces; i++) {
@@ -478,9 +481,9 @@ public class DocumentParser implements ParserState {
             sb.append(rest);
             content = sb.toString();
         } else if (index == 0) {
-            content = line.getContent();
+            content = lineContent;
         } else {
-            content = line.getContent().subSequence(index, line.getContent().length());
+            content = lineContent.subSequence(index, lineLen);
         }
         SourceSpan sourceSpan = null;
         if (includeSourceSpans == IncludeSourceSpans.BLOCKS_AND_INLINES && index < line.getSourceSpan().getLength()) {
@@ -493,13 +496,14 @@ public class DocumentParser implements ParserState {
 
     private void addSourceSpans() {
         if (includeSourceSpans != IncludeSourceSpans.NONE) {
+            int lineLen = line.getContent().length();
             // Don't add source spans for Document itself (it would get the whole source text), so start at 1, not 0
             for (int i = 1; i < openBlockParsers.size(); i++) {
                 var openBlockParser = openBlockParsers.get(i);
                 // In case of a lazy continuation line, the index is less than where the block parser would expect the
                 // contents to start, so let's use whichever is smaller.
                 int blockIndex = Math.min(openBlockParser.sourceIndex, index);
-                int length = line.getContent().length() - blockIndex;
+                int length = lineLen - blockIndex;
                 if (length != 0) {
                     openBlockParser.blockParser.addSourceSpan(line.getSourceSpan().subSpan(blockIndex));
                 }
