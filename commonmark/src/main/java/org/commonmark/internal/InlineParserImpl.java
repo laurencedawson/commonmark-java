@@ -701,8 +701,9 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
 
         String delimStr = String.valueOf(delimiterChar);
         var delimiters = new ArrayList<Text>(delimiterCount);
-        scanner.setPositionFromLong(start);
         if (includeSourceSpans) {
+            // Rewind and re-scan character by character to capture source spans
+            scanner.setPositionFromLong(start);
             Position positionBefore = scanner.position();
             for (int i = 0; i < delimiterCount; i++) {
                 scanner.next();
@@ -710,8 +711,8 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
                 positionBefore = scanner.position();
             }
         } else {
+            // Fast path: no rewind needed, scanner is already past the delimiters
             for (int i = 0; i < delimiterCount; i++) {
-                scanner.next();
                 delimiters.add(new Text(delimStr));
             }
         }
