@@ -1,39 +1,39 @@
 package org.commonmark.text;
 
-import java.util.BitSet;
 import java.util.Set;
 
 /**
  * Char matcher that can match ASCII characters efficiently.
  */
 public class AsciiMatcher implements CharMatcher {
-    private final BitSet set;
+    private final boolean[] set;
 
     private AsciiMatcher(Builder builder) {
-        this.set = builder.set;
+        // Copy the builder's array so the built matcher is immutable.
+        this.set = builder.set.clone();
     }
 
     @Override
     public boolean matches(char c) {
-        return set.get(c);
+        return c < 128 && set[c];
     }
 
     public Builder newBuilder() {
-        return new Builder((BitSet) set.clone());
+        return new Builder(set.clone());
     }
 
     public static Builder builder() {
-        return new Builder(new BitSet());
+        return new Builder(new boolean[128]);
     }
 
     public static Builder builder(AsciiMatcher matcher) {
-        return new Builder((BitSet) matcher.set.clone());
+        return new Builder(matcher.set.clone());
     }
 
     public static class Builder {
-        private final BitSet set;
+        private final boolean[] set;
 
-        private Builder(BitSet set) {
+        private Builder(boolean[] set) {
             this.set = set;
         }
 
@@ -41,7 +41,7 @@ public class AsciiMatcher implements CharMatcher {
             if (c > 127) {
                 throw new IllegalArgumentException("Can only match ASCII characters");
             }
-            set.set(c);
+            set[c] = true;
             return this;
         }
 
