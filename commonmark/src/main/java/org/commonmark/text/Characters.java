@@ -63,10 +63,24 @@ public class Characters {
         return false;
     }
 
+    // ASCII punctuation lookup table for fast path. Matches the same set of ASCII chars that would be classified
+    // as punctuation by the Unicode + extra-chars logic below.
+    private static final boolean[] ASCII_PUNCTUATION = new boolean[128];
+    static {
+        // General category P chars in ASCII range + extras
+        for (char c : "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".toCharArray()) {
+            ASCII_PUNCTUATION[c] = true;
+        }
+    }
+
     /**
      * @see <a href="https://spec.commonmark.org/0.31.2/#unicode-punctuation-character">Unicode punctuation character</a>
      */
     public static boolean isPunctuationCodePoint(int codePoint) {
+        // ASCII fast path — markdown is mostly ASCII
+        if (codePoint < 128) {
+            return codePoint >= 0 && ASCII_PUNCTUATION[codePoint];
+        }
         switch (Character.getType(codePoint)) {
             // General category "P" (punctuation)
             case Character.DASH_PUNCTUATION:
@@ -83,20 +97,7 @@ public class Characters {
             case Character.OTHER_SYMBOL:
                 return true;
             default:
-                switch (codePoint) {
-                    case '$':
-                    case '+':
-                    case '<':
-                    case '=':
-                    case '>':
-                    case '^':
-                    case '`':
-                    case '|':
-                    case '~':
-                        return true;
-                    default:
-                        return false;
-                }
+                return false;
         }
     }
 

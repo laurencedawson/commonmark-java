@@ -752,7 +752,10 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
         while (closer != null) {
             char delimiterChar = closer.delimiterChar;
 
-            DelimiterProcessor delimiterProcessor = delimiterProcessors.get(delimiterChar);
+            // Fast array path for ASCII (all delimiter chars we care about are ASCII)
+            DelimiterProcessor delimiterProcessor = delimiterChar < 128
+                    ? delimiterProcessorsByChar[delimiterChar]
+                    : delimiterProcessors.get(delimiterChar);
             if (!closer.canClose() || delimiterProcessor == null) {
                 closer = closer.next;
                 continue;
@@ -765,7 +768,9 @@ public class InlineParserImpl implements InlineParser, InlineParserState {
             boolean openerFound = false;
             boolean potentialOpenerFound = false;
             Delimiter opener = closer.previous;
-            while (opener != null && opener != stackBottom && opener != openersBottom.get(delimiterChar)) {
+            // Cache the openersBottom lookup — doesn't change during inner loop
+            Delimiter openersBottomForChar = openersBottom.get(delimiterChar);
+            while (opener != null && opener != stackBottom && opener != openersBottomForChar) {
                 if (opener.canOpen() && opener.delimiterChar == openingDelimiterChar) {
                     potentialOpenerFound = true;
                     usedDelims = delimiterProcessor.process(opener, closer);
