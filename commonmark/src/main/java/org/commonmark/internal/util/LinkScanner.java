@@ -18,8 +18,12 @@ public class LinkScanner {
      * the next line.
      */
     public static boolean scanLinkLabelContent(Scanner scanner) {
-        while (scanner.hasNext()) {
-            switch (scanner.peek()) {
+        while (true) {
+            char c = scanner.peek();
+            if (c == Scanner.END) {
+                return true;
+            }
+            switch (c) {
                 case '\\':
                     scanner.next();
                     if (isEscapable(scanner.peek())) {
@@ -36,7 +40,6 @@ public class LinkScanner {
                     scanner.next();
             }
         }
-        return true;
     }
 
     /**
@@ -48,8 +51,12 @@ public class LinkScanner {
         }
 
         if (scanner.next('<')) {
-            while (scanner.hasNext()) {
-                switch (scanner.peek()) {
+            while (true) {
+                char c = scanner.peek();
+                if (c == Scanner.END) {
+                    return false;
+                }
+                switch (c) {
                     case '\\':
                         scanner.next();
                         if (isEscapable(scanner.peek())) {
@@ -66,7 +73,6 @@ public class LinkScanner {
                         scanner.next();
                 }
             }
-            return false;
         } else {
             return scanLinkDestinationWithBalancedParens(scanner);
         }
@@ -104,8 +110,11 @@ public class LinkScanner {
     }
 
     public static boolean scanLinkTitleContent(Scanner scanner, char endDelimiter) {
-        while (scanner.hasNext()) {
+        while (true) {
             char c = scanner.peek();
+            if (c == Scanner.END) {
+                return true;
+            }
             if (c == '\\') {
                 scanner.next();
                 if (isEscapable(scanner.peek())) {
@@ -120,7 +129,6 @@ public class LinkScanner {
                 scanner.next();
             }
         }
-        return true;
     }
 
     // spec: a nonempty sequence of characters that does not start with <, does not include ASCII space or control
@@ -129,8 +137,11 @@ public class LinkScanner {
     private static boolean scanLinkDestinationWithBalancedParens(Scanner scanner) {
         int parens = 0;
         boolean empty = true;
-        while (scanner.hasNext()) {
+        while (true) {
             char c = scanner.peek();
+            if (c == Scanner.END) {
+                return true;
+            }
             switch (c) {
                 case ' ':
                     return !empty;
@@ -166,7 +177,6 @@ public class LinkScanner {
             }
             empty = false;
         }
-        return true;
     }
 
     private static boolean isEscapable(char c) {
